@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rqalpha-mod-local-rqdata"
+version = "0.1.0"
+description = "RQAlpha daily A-share data source backed by the local RQData warehouse"
+requires-python = ">=3.10"
+dependencies = ["duckdb", "numpy", "pandas", "rqalpha"]
+
+[tool.setuptools]
+packages = ["rqalpha_mod_local_rqdata"]
+
+[tool.setuptools.package-dir]
+rqalpha_mod_local_rqdata = "."

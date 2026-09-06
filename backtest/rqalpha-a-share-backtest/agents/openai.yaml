@@ -1,0 +1,4 @@
+interface:
+  display_name: "RQAlpha A股回测"
+  short_description: "使用本地 A 股仓库运行和扩展 RQAlpha 回测"
+  default_prompt: "Use $rqalpha-a-share-backtest to build and validate an A-share backtest with the local data warehouse."
