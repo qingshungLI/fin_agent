@@ -37,7 +37,9 @@ export class DailyBarParquetSource implements DataSource {
         while ((raw = await cursor.next()) !== null) {
           const orderBookId = String(raw.order_book_id ?? ""); const date = String(raw.date ?? "").slice(0, 10); const key = `${orderBookId}|${date}`;
           if (!orderBookId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`${key}: invalid identity/date`);
-          output.push({ orderBookId, date, open: numberField(raw, "open", key), high: numberField(raw, "high", key), low: numberField(raw, "low", key), close: numberField(raw, "close", key), prevClose: numberField(raw, "prev_close", key), volume: numberField(raw, "volume", key), totalTurnover: numberField(raw, "total_turnover", key), isSt: false, isSuspended: false, limitUp: optionalNumber(raw, "limit_up"), limitDown: optionalNumber(raw, "limit_down") });
+          const limitUp = optionalNumber(raw, "limit_up");
+          const limitDown = optionalNumber(raw, "limit_down");
+          output.push({ orderBookId, date, open: numberField(raw, "open", key), high: numberField(raw, "high", key), low: numberField(raw, "low", key), close: numberField(raw, "close", key), prevClose: numberField(raw, "prev_close", key), volume: numberField(raw, "volume", key), totalTurnover: numberField(raw, "total_turnover", key), isSt: false, isSuspended: false, ...(limitUp === undefined ? {} : { limitUp }), ...(limitDown === undefined ? {} : { limitDown }) });
           if (this.limit !== undefined && output.length >= this.limit) return output;
         }
       } finally { await reader.close(); }
