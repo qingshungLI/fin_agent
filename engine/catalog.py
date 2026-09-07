@@ -48,6 +48,20 @@ class Assertion(BaseModel):
     weight: float = Field(default=0.2, gt=0, le=1)
     prior_p: float = Field(default=0.6, ge=0.2, le=0.8)
 
+    @model_validator(mode="after")
+    def validate_assertion(self):
+        relations = {"shape": {"monotone_up", "monotone_down"}, "peak": {"inside"},
+                     "sign": {"positive", "negative"}, "side": {"difference"}}
+        if self.relation not in relations[self.kind]:
+            raise ValueError("Assertion kind and relation disagree")
+        if len(self.horizons) != 1 or self.horizons[0] not in (1,3,5,10):
+            raise ValueError("Each assertion freezes exactly one registered horizon")
+        if len(self.peak_range) != 2 or not 1 <= self.peak_range[0] <= self.peak_range[1] <= 10:
+            raise ValueError("Invalid frozen peak interval")
+        if self.kind == "sign" and self.direction != (1 if self.relation == "positive" else -1):
+            raise ValueError("Sign relation and direction disagree")
+        return self
+
 
 class Structure(BaseModel):
     """登记机制及三个算子化；输入标签和断言，要求旁证可观察且表达式不重复。"""
@@ -75,6 +89,8 @@ class Structure(BaseModel):
                 raise ValueError(f"未登记词表: {slot}={value}")
         if self.form in INFEASIBLE.get(self.family, []):
             raise ValueError("该机制/表现形式已被登记为不可行")
+        if self.labels["form"] != FORM_CODES[self.form - 1]:
+            raise ValueError("Representation label disagrees with map coordinate")
         if len(set(self.operational)) != 3:
             raise ValueError("三个表达式必须不同")
         if len({a.id for a in self.assertions}) != len(self.assertions):
@@ -155,6 +171,9 @@ def register_cell(
 ) -> dict[str, Any]:
     """执行尺度、边界、截断不变性与混淆检查；返回注册报告，未通过时拒绝。"""
     compiled = compile_expression(expression, set(fields), cuts)
+    # Only referenced inputs plus implicit rank/industry context need scale copies.
+    selected = set(compiled.dependencies) | set(confounders or []) | ({"in_pool", "industry"} & set(fields))
+    fields = {k: v for k, v in fields.items() if k in selected}
     value = evaluate(expression, fields, cuts)
     if not value.notna().any().any():
         raise ValueError(f"表达式没有有效观测: {expression}")

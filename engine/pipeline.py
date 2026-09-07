@@ -27,9 +27,17 @@ from engine.catalog import (
 )
 from engine.config import ROOT, ResearchConfig
 from engine.consistency import consistency_views
+from engine.cycle import (
+    ProposalTask,
+    followup_tasks,
+    initial_tasks,
+    merge_induction,
+    observation_laws,
+    prior_hint,
+)
 from engine.discovery import evolve_operators, repeat_splits, variance_vs_mean_screen
 from engine.llm import DeepSeek
-from engine.memory import fit_hierarchy, reconcile_law_posterior
+from engine.memory import fit_hierarchy, next_probe, reconcile_law_posterior
 from engine.metrics import group_returns, measure_panel, power_budget, summarize
 
 
@@ -104,6 +112,19 @@ def cost_report(stored, panel, structure):
             "interpretation": "fixed-cost overlapping research groups; not executable strategy returns"})
 
 
+def refresh_memory(rows, folder, config, enabled):
+    from engine.memory_inputs import build_memory_inputs
+    if not enabled:
+        return {"state": "UNIDENTIFIABLE", "terms": [], "reason": "Bayes disabled"}
+    frame, covariance, diagnostic = build_memory_inputs(rows, folder, config.n_boot, config.seed)
+    write_json(folder / "memory-inputs.json", diagnostic)
+    if frame.empty or covariance is None:
+        return {"state": "UNIDENTIFIABLE", "terms": [], "reason": diagnostic["state"]}
+    frame.to_parquet(folder / "memory-quarters.parquet")
+    np.save(folder / "memory-covariance.npy", covariance)
+    return fit_hierarchy(frame, config.seed, covariance=covariance)
+
+
 def run_research(config: ResearchConfig, run_id: str, data_root=Path("data"),
                  output_root=Path("artifacts"), discovery=False, bayes=False):
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", run_id):
@@ -169,7 +190,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
             "data-quality.json": file_hash(folder / "data-quality.json"),
         })
         write_json(checkpoint, state)
-        llm = DeepSeek(audit_root / "llm-cache") if config.provider in {"llm", "hybrid"} else None
+        llm = DeepSeek(audit_root / "llm-cache", max_calls=config.llm_max_calls) if config.provider in {"llm", "hybrid"} else None
         rows = [json.loads((folder / sid / "result.json").read_text()) for sid in state["completed"]]
         signal_library = []
         fingerprints = set()
@@ -178,10 +199,11 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
             if row["blades"]["placebo"]["state"] == "pass" and row["verdict"] != "FAIL":
                 signal_library.append(pd.read_parquet(folder / row["id"] / "research-factor.parquet"))
         cells = build_map()
-        order = [("M2", 3), ("M2", 1), ("M1", 3), ("M1", 1)]
-        order += [(x["family"], x["form"]) for x in cells
-                  if x["status"] == "unexplored" and (x["family"], x["form"]) not in order]
-        for index in range(len(rows), config.max_structures):
+        if "queue" not in state:
+            state["queue"] = [t.model_dump() for t in initial_tasks()]
+            state["queued_keys"] = [t.key for t in initial_tasks()]
+        posterior = {"state": "UNIDENTIFIABLE", "terms": []}
+        for index in range(state.get("attempts", len(rows)), config.max_structures):
             begin = perf_counter()
             sid = f"S-{run_id}-{index + 1:03d}"
             destination = folder / sid
@@ -190,18 +212,38 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
             if spec_path.exists():
                 structure = Structure.model_validate(json.loads(spec_path.read_text()))
             else:
-                family, form = order[index]
-                cell = next(c for c in cells if c["family"] == family and c["form"] == form)
-                if config.provider == "llm":
-                    structure = llm.propose(cell, run_id, index, set(panel.fields))
+                if not state["queue"]:
+                    state["stop_reason"] = "finite feasible proposal queue exhausted"
+                    break
+                task = ProposalTask.model_validate(state["queue"][0])
+                cell = next(c for c in cells if c["family"] == task.family and c["form"] == task.form)
+                parent = next((r for r in rows if r["id"] == task.parent), None)
+                if config.provider == "llm" or (config.provider == "hybrid" and index >= 4):
+                    try:
+                        structure = llm.propose(cell, run_id, index, set(panel.fields), cuts, prior_hint(task, parent))
+                    except ValueError as exc:
+                        rejection = {"coordinate": cell["id"], "reason": str(exc),
+                                     "outcomes_read_for_proposal": False, "attempt": index+1}
+                        write_json(destination / "rejected-prior.json", rejection)
+                        state.setdefault("rejected_priors", []).append(rejection)
+                        state["queue"].pop(0)
+                        state["attempts"] = index+1
+                        state.setdefault("artifact_hashes", {})[str((destination/"rejected-prior.json").relative_to(folder))] = file_hash(destination/"rejected-prior.json")
+                        write_json(checkpoint, state)
+                        store.append("prior_rejected", {"run_id": run_id, **rejection})
+                        print(f"{sid}: prior rejected; no measurement performed", flush=True)
+                        continue
                 elif index < 4:
                     structure = seed_structure(index, run_id)
                 else:
-                    raise ValueError("Manual/hybrid provider has four vetted seeds; use --provider llm for expansion")
+                    raise ValueError("Manual provider has four seeds; use llm/hybrid for automated research")
                 write_json(spec_path, structure.model_dump())
             fingerprint = digest({"expressions": sorted(structure.operational),
                                   "coverage": structure.coverage, "horizon": structure.primary_horizon})
-            if fingerprint in fingerprints:
+            if fingerprint in fingerprints and not (
+                structure.lineage.get("operator") == "cross_family"
+                and any(r["id"] == structure.lineage.get("parent") and r["fingerprint"] == fingerprint for r in rows)
+            ):
                 raise ValueError("Duplicate factor definition; requires a new proposal, not another test")
             reports = [register_cell(expr, panel.fields, cuts) for expr in structure.operational]
             orientation = check_convergent_orientation(structure, panel.fields, cuts)
@@ -271,6 +313,56 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
             row = json_safe(row)
             write_json(destination / "result.json", row)
             rows.append(row)
+            if state["queue"]:
+                state["queue"].pop(0)
+            laws = observation_laws(rows)
+            write_json(folder / "laws.json", laws)
+            if config.auto_evolve and llm:
+                followups = followup_tasks(row, rows)
+                write_json(destination / "followups.json", followups)
+                for payload in reversed(followups["tasks"]):
+                    task = ProposalTask.model_validate(payload)
+                    if task.key not in state["queued_keys"]:
+                        # Keep the cold-start 2x2 intact; then process a resolved follow-up.
+                        insertion = max(0, 4 - len(rows))
+                        state["queue"].insert(insertion, payload)
+                        state["queued_keys"].append(task.key)
+                if len(rows) % 5 == 0:
+                    posterior = refresh_memory(rows, folder, config, bayes)
+                    write_json(folder / f"memory-step-{len(rows):03d}.json", json_safe(posterior))
+                    probe = next_probe(cells, posterior, {f"{r['family']}-F{r['form']}" for r in rows})
+                    if probe:
+                        write_json(folder / f"probe-step-{len(rows):03d}.json", {
+                            "coordinate": probe["id"], "basis": posterior["state"],
+                            "formal": False})
+                        # Prioritize an existing unexplored seed without duplicating it.
+                        chosen = next((i for i,t in enumerate(state["queue"])
+                                       if t["family"]==probe["family"] and t["form"]==probe["form"]
+                                       and t["operator"]=="seed"), None)
+                        if chosen is not None:
+                            state["queue"].insert(0, state["queue"].pop(chosen))
+                if len(rows) % 5 == 0 and laws:
+                    from engine.llm import role_context
+                    edits = llm.request("inducer", role_context("inducer", laws=laws, posterior={
+                        **posterior, "available_coordinates": [c["id"] for c in cells if c["status"] == "unexplored"
+                            and not any(r["family"] == c["family"] and r["form"] == c["form"] for r in rows)]}),
+                        "Return JSON {probes:[],connections:[]}. Probe coordinates must be in available_coordinates. "
+                        "At most three probes, each "
+                        "{coordinate:'M1-F1',evidence:[existing law IDs]}; at most five connections "
+                        "{laws:[existing law IDs],hypothesis:'unconfirmed Chinese research question'}. "
+                        "Do not rewrite verdicts, frozen vocabulary or claim a law is confirmed. "
+                        "Prefer empty lists if there is no supported research connection.")
+                    visited = {f"{r['family']}-F{r['form']}" for r in rows}
+                    remaining_cells = [{**c, "status": "explored"} if c["id"] in visited else c for c in cells]
+                    induction = merge_induction(edits, laws, remaining_cells)
+                    write_json(folder / f"induction-{len(rows):03d}.json", induction)
+                    for payload in induction["tasks"]:
+                        task = ProposalTask.model_validate(payload)
+                        if task.key not in state["queued_keys"]:
+                            state["queue"].append(payload)
+                            state["queued_keys"].append(task.key)
+            write_json(folder / "queue.json", {"pending": state["queue"],
+                "remaining_measurement_budget": config.max_structures - index - 1})
             fingerprints.add(fingerprint)
             if blades["placebo"]["state"] == "pass" and row["verdict"] != "FAIL":
                 signal_library.append(stored["signal_0"])
@@ -278,6 +370,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                 str(p.relative_to(folder)): file_hash(p) for p in destination.iterdir() if p.is_file()
             })
             state["completed"].append(sid)
+            state["attempts"] = index+1
             write_json(checkpoint, state)
             store.append("structure_completed", {"run_id": run_id, "id": sid,
                                                  "result_hash": digest(row)})
@@ -285,22 +378,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                   f"placebo={blades['placebo']['state']} {row['seconds']:.1f}s", flush=True)
             publish(root, folder, rows, panel, state, store)
         write_json(folder / "consistency.json", consistency_views(rows))
-        # Only non-artifact, non-retracted structures enter hierarchical memory.
-        quarters = []
-        for row in rows:
-            if row["blades"]["placebo"]["state"] != "pass" or any(
-                a["kind"] == "side" and a["state"] == "violated" for a in row["blades"]["assertions"]):
-                continue
-            for q in row["measurement"]["quarterly"]:
-                if q["mean"] is not None and q["se"] is not None:
-                    quarters.append({"structure": row["id"], "period": q["period"],
-                                     "family": row["family"], "form": str(row["form"]),
-                                     "mean": q["mean"], "se": q["se"]})
-        if bayes and quarters:
-            posterior = fit_hierarchy(pd.DataFrame(quarters), config.seed)
-        else:
-            posterior = {"state": "UNIDENTIFIABLE", "terms": [],
-                         "reason": "no eligible quarterly structures" if not quarters else "Bayes disabled"}
+        posterior = refresh_memory(rows, folder, config, bayes)
         write_json(folder / "memory.json", json_safe(posterior))
         write_json(folder / "wealth.json", {"state": "UNCALIBRATED",
             "reason": "IC placebo distributions do not supply per-assertion p0 bounds; no fabricated wealth",
@@ -313,11 +391,19 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                     calibration.append({"structure": row["id"], "assertion": assertion["id"],
                         "probability": frozen["bets"][assertion["id"]]["probability"],
                         "outcome": int(assertion["state"] == "hold")})
-        write_json(folder / "blind-calibration.json", {"observations": calibration,
-            "platt_fitted": False, "reason": "insufficient independent resolved observations"})
+        from engine.evidence import calibration_report
+        write_json(folder / "blind-calibration.json", {
+            "observations": calibration,
+            "reliability": calibration_report([r["probability"] for r in calibration],
+                                              [r["outcome"] for r in calibration]),
+            "platt_fitted": False,
+            "reason": "same-model assertions share data; no claim of independent calibration"})
         write_json(folder / "portfolio.json", {"state": "BLOCKED", "formal_structures": [],
             "reason": "No B-confirmed PASS structures; unconfirmed laws cannot route positions"})
-        write_json(folder / "memory-gaps.json", reconcile_law_posterior([], posterior))
+        write_json(folder / "memory-gaps.json", reconcile_law_posterior(observation_laws(rows), posterior))
+        state.setdefault("artifact_hashes", {}).update({
+            p.name: file_hash(p) for p in folder.glob("*.json") if p.name not in {"checkpoint.json", "failure.json"}
+        })
         state["status"] = "COMPLETED"
         if (root / "failure.json").exists():
             previous = json.loads((root / "failure.json").read_text())

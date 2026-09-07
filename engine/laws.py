@@ -1,10 +1,10 @@
 """规律账本管线：只允许可求值 scope、确认状态和证据引用完整的市场规律落盘。"""
 
+import ast
 from pathlib import Path
 from typing import Any
-import ast
-import yaml
 
+import yaml
 
 
 def validate_scope(scope: str, fields: set[str]) -> None:

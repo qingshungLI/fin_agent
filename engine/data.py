@@ -308,33 +308,38 @@ def build_panel(
     fields["is_limit_up"] = fields["close"].ge(fields["limit_up"] - 0.005) & fields["limit_up"].gt(0)
     fields["is_limit_down"] = fields["close"].le(fields["limit_down"] + 0.005) & fields["limit_down"].gt(0)
     fields["failed_limit_up"] = fields["high"].ge(fields["limit_up"] - 0.005) & ~fields["is_limit_up"] & fields["limit_up"].gt(0)
-    auction = read_source(root, "open_auction", warmup, end, symbols=symbols,
-                          date_column="datetime", manifest=manifest)
-    auction["date"] = pd.to_datetime(auction.datetime).dt.normalize()
-    require_unique(auction, ["order_book_id", "date"], "open_auction")
-    seconds = (pd.to_datetime(auction.datetime) - auction.date).dt.total_seconds()
-    outside = (seconds < 9 * 3600 + 24 * 60) | (seconds > 9 * 3600 + 26 * 60)
-    if outside.any():
-        if (config.auction_policy or config.industry_policy) == "strict":
-            raise ValueError("竞价快照不在约定 09:24-09:26 窗口")
-        report.append({"name": "隔离超时竞价快照", "status": "warning",
-                       "count": int(outside.sum()), "formal_eligible": False,
-                       "detail": "未将其他时点盘口冒充竞价；所有对应竞价字段保留缺失"})
-        auction.loc[outside, [c for c in auction.columns if c not in
-                             {"order_book_id", "datetime", "date"}]] = np.nan
-    buy = auction[[f"b{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
-    sell = auction[[f"a{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
-    auction["auction_imbalance"] = (buy - sell) / (buy + sell).replace(0, np.nan)
-    valid_quote = auction.a1.gt(0) & auction.b1.gt(0) & auction.a1.ge(auction.b1)
-    auction["auction_spread"] = ((auction.a1 - auction.b1) / ((auction.a1 + auction.b1) / 2)).where(valid_quote)
-    auction["auction_amount"] = auction.total_turnover
-    for name in ["auction_imbalance", "auction_spread", "auction_amount"]:
-        fields[name] = auction.pivot(index="date", columns="order_book_id", values=name).reindex(index=dates, columns=symbols)
-    fields["auction_turnover_share"] = fields["auction_amount"] / fields["total_turnover"].rolling(20, min_periods=20).mean().shift(1)
-    report.append({"name": "竞价盘口有效性", "status": "warning" if not valid_quote.all() else "pass",
-                   "count": int((~valid_quote).sum()), "detail": "零价或交叉盘口不作为可用价差"})
+    if config.data_profile == "full":
+        auction = read_source(root, "open_auction", warmup, end, symbols=symbols,
+                              date_column="datetime", manifest=manifest)
+        auction["date"] = pd.to_datetime(auction.datetime).dt.normalize()
+        require_unique(auction, ["order_book_id", "date"], "open_auction")
+        seconds = (pd.to_datetime(auction.datetime) - auction.date).dt.total_seconds()
+        outside = (seconds < 9 * 3600 + 24 * 60) | (seconds > 9 * 3600 + 26 * 60)
+        if outside.any():
+            if (config.auction_policy or config.industry_policy) == "strict":
+                raise ValueError("竞价快照不在约定 09:24-09:26 窗口")
+            report.append({"name": "隔离超时竞价快照", "status": "warning",
+                           "count": int(outside.sum()), "formal_eligible": False,
+                           "detail": "未将其他时点盘口冒充竞价；所有对应竞价字段保留缺失"})
+            auction.loc[outside, [c for c in auction.columns if c not in
+                                 {"order_book_id", "datetime", "date"}]] = np.nan
+        buy = auction[[f"b{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
+        sell = auction[[f"a{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
+        auction["auction_imbalance"] = (buy - sell) / (buy + sell).replace(0, np.nan)
+        valid_quote = auction.a1.gt(0) & auction.b1.gt(0) & auction.a1.ge(auction.b1)
+        auction["auction_spread"] = ((auction.a1 - auction.b1) / ((auction.a1 + auction.b1) / 2)).where(valid_quote)
+        auction["auction_amount"] = auction.total_turnover
+        for name in ["auction_imbalance", "auction_spread", "auction_amount"]:
+            fields[name] = auction.pivot(index="date", columns="order_book_id", values=name).reindex(index=dates, columns=symbols)
+        fields["auction_turnover_share"] = fields["auction_amount"] / fields["total_turnover"].rolling(20, min_periods=20).mean().shift(1)
+        report.append({"name": "竞价盘口有效性", "status": "warning" if not valid_quote.all() else "pass",
+                       "count": int((~valid_quote).sum()), "detail": "零价或交叉盘口不作为可用价差"})
+    else:
+        report.append({"name": "事前登记日线量价数据配置", "status": "pass", "count": 0,
+                       "detail": "不读取或登记任何竞价字段，不能据此研究竞价机制"})
     for name in ["market_cap", "amihud", "realized_vol", "auction_spread", "turnover_today", "avg_trade_size"]:
-        fields[name + "_pct"] = fields[name].where(fields["in_pool"]).rank(axis=1, pct=True) * 100
+        if name in fields:
+            fields[name + "_pct"] = fields[name].where(fields["in_pool"]).rank(axis=1, pct=True) * 100
     labels = build_labels(fields)
     for name, values in list(labels.items()):
         if name.startswith("raw_"):

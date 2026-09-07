@@ -24,6 +24,7 @@ function App() {
       const response = await fetch('/api/jobs', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({provider:form.get('provider'),max_symbols:Number(form.get('symbols')),
           max_structures:Number(form.get('structures')),workers:4,
+          data_profile:form.get('dataProfile'),discovery:form.get('discovery') === 'on',bayes:form.get('bayes') === 'on',
           engineering:form.get('mode') === 'engineering',industry_policy:form.get('policy'), industry_source:form.get('industrySource'),
           auction_policy:form.get('auctionPolicy') === 'inherit' ? null : form.get('auctionPolicy')})});
       const result = await response.json();
@@ -68,10 +69,13 @@ function App() {
         <h2>启动服务器研究</h2>
         <p>所有计算在服务器执行。快速检查用于验证流程；完整检验仍须通过数据质量和独立确认。</p>
         <form onSubmit={launchRun} className="run-form">
-          <label>想法来源<select name="provider" defaultValue="llm"><option value="llm">DeepSeek 生成</option><option value="hybrid">基线 + DeepSeek 评估</option><option value="manual">固定基线</option></select></label>
-          <label>股票数量<input name="symbols" type="number" min="100" max="6000" defaultValue="600" required /></label>
-          <label>结构数量<input name="structures" type="number" min="1" max="4" defaultValue="1" required /></label>
+          <label>想法来源<select name="provider" defaultValue="llm"><option value="llm">DeepSeek 生成</option><option value="hybrid">基线 + DeepSeek 演化</option><option value="manual">固定基线</option></select></label>
+          <label>股票数量（0 为全部）<input name="symbols" type="number" min="0" max="6000" defaultValue="600" required /></label>
+          <label>结构数量<input name="structures" type="number" min="1" max="12" defaultValue="1" required /></label>
           <label>检验规模<select name="mode" defaultValue="engineering"><option value="engineering">快速检查</option><option value="formal">完整检验</option></select></label>
+          <label>研究数据<select name="dataProfile" defaultValue="daily"><option value="daily">日线与成交，不含竞价</option><option value="full">包含开盘竞价</option></select></label>
+          <label>条件发现<input name="discovery" type="checkbox" /></label>
+          <label>贝叶斯研究记忆<input name="bayes" type="checkbox" /></label>
           <label>行业来源<select name="industrySource" defaultValue="rqdata_daily"><option value="rqdata_daily">RQData 逐日直接查询</option><option value="exact_intervals">原始历史区间</option></select></label>
           <label>竞价处理<select name="auctionPolicy" defaultValue="inherit"><option value="inherit">随数据处理方式</option><option value="strict">严格校验</option><option value="quarantine">隔离异常，仅供探索</option></select></label>
           <label>数据处理<select name="policy" defaultValue="strict"><option value="strict">严格校验</option><option value="quarantine">隔离异常，仅供探索</option></select></label>

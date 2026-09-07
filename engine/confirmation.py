@@ -14,13 +14,15 @@ from engine.pipeline import eligibility, json_safe, project_lock
 
 
 def batch_decisions(rows, alpha=.05):
-    adjusted = holm([row["p"] for row in rows])
+    joint = [max(row["p"], *(a.get("p_support", 1.) for a in row["assertions"]))
+             if row["assertions"] else 1. for row in rows]
+    adjusted = holm(joint)
     decisions = []
-    for row, p in zip(rows, adjusted):
+    for row, joint_p, p in zip(rows, joint, adjusted):
         hold = all(a["state"] == "hold" for a in row["assertions"]) and bool(row["assertions"])
         contradicted = any(a["state"] == "violated" for a in row["assertions"])
         verdict = ("PASS" if hold and p <= alpha else "FAIL" if contradicted else "UNDECIDABLE")
-        decisions.append({**row, "adjusted_p": p, "verdict": verdict,
+        decisions.append({**row, "joint_p": joint_p, "adjusted_p": p, "verdict": verdict,
                           "formal": verdict == "PASS", "correction": "frozen-batch Holm"})
     return decisions
 
@@ -86,12 +88,12 @@ def confirm_once(config, run_id, ids, data_root=Path("data"), output_root=Path("
                 primary = next(r for r in measurement["curves"] if r["expression"] == 1
                                and r["horizon"] == structure.primary_horizon)
                 assertions = blade_assertion(structure, panel, stored, config)
-                p = primary["p"]
+                p = max(primary["p"], *(a["p_support"] for a in assertions))
                 interaction = None
                 if structure.lineage.get("origin") == "forest":
                     moderator = structure.lineage["moderator"]
                     cut = cuts[structure.lineage["cut_id"]]["value"]
-                    sample = make_sample(panel, stored["signal_0"], structure.primary_horizon, [moderator])
+                    sample = make_sample(panel, stored.get("ungated_signal", stored["signal_0"]), structure.primary_horizon, [moderator])
                     interaction = blade_icm(sample, moderator, cut, structure.primary_horizon, config)
                     p = max(p, interaction["p"])
                 results.append({"id": row["id"], "segment": segment, "p": p,

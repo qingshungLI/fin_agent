@@ -20,18 +20,23 @@ JOBS = ROOT / "artifacts" / "jobs"
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: Literal["manual", "hybrid", "llm"] = "hybrid"
-    max_symbols: int = Field(default=600, ge=100, le=6000)
+    max_symbols: int = Field(default=600, ge=0, le=6000)
     max_structures: int = Field(default=4, ge=1, le=12)
     workers: int = Field(default=4, ge=1, le=8)
     engineering: bool = True
+    discovery: bool = False
+    bayes: bool = False
+    data_profile: Literal["full", "daily"] = "full"
     industry_policy: Literal["strict", "quarantine"] = "strict"
     industry_source: Literal["exact_intervals", "rqdata_daily"] = "exact_intervals"
     auction_policy: Literal["strict", "quarantine"] | None = None
 
     @model_validator(mode="after")
     def supported_seed_count(self):
-        if self.provider != "llm" and self.max_structures > 4:
+        if self.provider == "manual" and self.max_structures > 4:
             raise ValueError("Fixed baselines contain four structures")
+        if 0 < self.max_symbols < 100:
+            raise ValueError("Select all symbols (0) or at least 100")
         return self
 
 
@@ -83,11 +88,16 @@ def worker(job_id):
     args = [str(ROOT / ".venv/bin/python"), "run_engine.py", "--run-id", job_id,
             "--provider", options.provider, "--max-symbols", str(options.max_symbols),
             "--max-structures", str(options.max_structures), "--workers", str(options.workers),
-            "--industry-policy", options.industry_policy, "--industry-source", options.industry_source]
+            "--industry-policy", options.industry_policy, "--industry-source", options.industry_source,
+            "--data-profile", options.data_profile]
     if options.auction_policy:
         args.extend(["--auction-policy", options.auction_policy])
     if options.engineering:
         args.append("--engineering")
+    if options.discovery:
+        args.append("--discovery")
+    if options.bayes:
+        args.append("--bayes")
     env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1")
     result = subprocess.run(args, cwd=ROOT, env=env, check=False)
     record.update(status="COMPLETED" if result.returncode == 0 else "FAILED",

@@ -21,6 +21,8 @@ def main():
     p.add_argument("--industry-policy", choices=["strict", "quarantine"], default="strict")
     p.add_argument("--industry-source", choices=["exact_intervals", "rqdata_daily"], default="exact_intervals")
     p.add_argument("--auction-policy", choices=["strict", "quarantine"], default=None)
+    p.add_argument("--data-profile", choices=["full", "daily"], default="full")
+    p.add_argument("--no-auto-evolve", action="store_true")
     p.add_argument("--engineering", action="store_true")
     p.add_argument("--discovery", action="store_true")
     p.add_argument("--bayes", action="store_true")
@@ -29,6 +31,7 @@ def main():
                             max_structures=args.max_structures, workers=args.workers,
                             provider=args.provider, industry_policy=args.industry_policy,
                             industry_source=args.industry_source, auction_policy=args.auction_policy,
+                            data_profile=args.data_profile, auto_evolve=not args.no_auto_evolve,
                             mode="engineering" if args.engineering else "formal",
                             n_boot=100 if args.engineering else 1000,
                             n_placebo=99 if args.engineering else 500,

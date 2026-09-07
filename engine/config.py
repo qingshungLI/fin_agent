@@ -42,7 +42,10 @@ class ResearchConfig(BaseModel):
     industry_policy: Literal["strict", "quarantine"] = "strict"
     industry_source: Literal["exact_intervals", "rqdata_daily"] = "exact_intervals"
     auction_policy: Literal["strict", "quarantine"] | None = None
+    data_profile: Literal["full", "daily"] = "full"
     cache: bool = True
+    auto_evolve: bool = True
+    llm_max_calls: int = Field(default=200, ge=10, le=600)
 
     @model_validator(mode="after")
     def validate_protocol(self) -> "ResearchConfig":

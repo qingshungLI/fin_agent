@@ -4,13 +4,13 @@ B/H 使用全项目一次性消费凭证；失败也保留读取事实。文件�
 本地哈希链检测修改，不能替代外部时间戳服务或抵御同权限整库重写。
 """
 
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
 import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterator
 
 

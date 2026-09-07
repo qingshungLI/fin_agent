@@ -74,4 +74,3 @@ def test_daily_industry_join_never_fills_missing_dates():
         attach_daily_industry(dates, ["A"], pd.concat([daily,daily]))
     with pytest.raises(ValueError, match="来源"):
         attach_daily_industry(dates, ["A"], daily.assign(source="unknown"))
-

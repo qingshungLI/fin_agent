@@ -180,6 +180,11 @@ def measure_panel(
     stored["contribution"] = contribution
     for i, signal in enumerate(signals):
         stored[f"signal_{i}"] = signal
+    if structure.lineage.get("ungated_operational"):
+        parent_coverage = evaluate(structure.lineage["ungated_coverage"], panel.fields, cuts).fillna(False).astype(bool)
+        stored["ungated_signal"] = evaluate(structure.lineage["ungated_operational"][0],
+                                             panel.fields, cuts).where(parent_coverage)
+        stored["condition_cut"] = pd.DataFrame({"value": [cuts[structure.lineage["cut_id"]]["value"]]})
     primary_ic = stored[f"ic_e1_h{structure.primary_horizon}"].ic
     monthly = []
     quarterly = []
@@ -204,7 +209,10 @@ def measure_panel(
             "coverage": float((coverage & primary.notna()).sum().sum() / max(1, panel.fields["in_pool"].sum().sum())),
             "observations": int(hit_valid.sum().sum()), "dates": len(panel.dates),
             "hit_rate": float(hits.sum().sum() / max(1, hit_valid.sum().sum())),
-            "car": car_event(panel.fields["failed_limit_up"], panel.fields["ret_1d"]),
+            "car": car_event(evaluate(structure.lineage["event_expression"], panel.fields, cuts).fillna(False).astype(bool)
+                             if structure.lineage.get("event_expression") else panel.fields["failed_limit_up"],
+                             panel.fields["ret_1d"]),
+            "car_event": structure.lineage.get("event_expression", "failed_limit_up (diagnostic only)"),
             "contribution_sum": float(contribution.sum().sum()),
             "influence_valid_days": int(psi.notna().any(axis=1).sum())}, stored
 

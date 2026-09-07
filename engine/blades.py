@@ -9,12 +9,11 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 from engine.catalog import Structure
 from engine.config import ResearchConfig
 from engine.data import MarketPanel
-from engine.metrics import daily_ic, summarize, group_returns
+from engine.metrics import daily_ic, group_returns, summarize
 
 
 def _array_ic(x: np.ndarray, y: np.ndarray) -> float:
@@ -141,53 +140,78 @@ def blade_assertion(
     structure: Structure, panel: MarketPanel, measured: dict[str, pd.DataFrame],
     config: ResearchConfig,
 ) -> list[dict[str, Any]]:
-    """检验冻结断言；返回逐条结果，旁证比较方向统一的差值，禁止 IC 比值除零。"""
+    """Return support p-values for the entire necessary-assertion hypothesis.
+
+    Intersections use max(p); unions use a Bonferroni bound. This lets frozen-batch
+    Holm control false mechanism claims even when their main effects are real.
+    """
     signal = measured["signal_0"]
     result = []
+
+    def directional(sequence, horizon, tolerance):
+        summary = summarize(sequence - tolerance, horizon, config)
+        negative = summarize(-sequence - tolerance, horizon, config) if tolerance else None
+        return summary, summary["p"], negative["p"] if negative else summary["p_negative"]
+
     for assertion in structure.assertions:
         horizon = assertion.horizons[0]
         returns = panel.labels[f"industry_resid_{horizon}"]
+        support, contradiction = 1.0, 1.0
         if assertion.kind == "sign":
-            per_expression = [summarize(measured[f"ic_e{i}_h{horizon}"].ic * assertion.direction,
-                                        horizon, config) for i in (1, 2, 3)]
-            states = [_assertion_state(item, assertion.tolerance) for item in per_expression]
-            state = "violated" if "violated" in states else "hold" if all(s == "hold" for s in states) else "untested"
-            detail = {"expressions": per_expression}
+            tests = [directional(measured[f"ic_e{i}_h{horizon}"].ic * assertion.direction,
+                                 horizon, assertion.tolerance) for i in (1, 2, 3)]
+            support = max(t[1] for t in tests)
+            contradiction = min(1., 3 * min(t[2] for t in tests))
+            detail = {"expressions": [t[0] for t in tests]}
         elif assertion.kind == "shape":
             groups = group_returns(signal, returns)
             direction = 1 if assertion.relation == "monotone_up" else -1
-            differences = [summarize((groups.iloc[:, i + 1] - groups.iloc[:, i]) * direction,
-                                     horizon, config) for i in range(groups.shape[1] - 1)]
-            means = groups.mean().to_numpy()
-            trend = stats.kendalltau(np.arange(len(means)), means * direction, nan_policy="omit")
-            states = [_assertion_state(item, assertion.tolerance) for item in differences]
-            state = "violated" if "violated" in states else "hold" if (
-                all(s == "hold" for s in states) and np.isfinite(trend.pvalue) and trend.pvalue < 0.1
-            ) else "untested"
-            detail = {"adjacent_differences": differences, "trend_p": float(trend.pvalue) if np.isfinite(trend.pvalue) else None}
+            tests = [directional((groups.iloc[:, i+1] - groups.iloc[:, i]) * direction,
+                                 horizon, assertion.tolerance) for i in range(groups.shape[1]-1)]
+            support = max(t[1] for t in tests)
+            contradiction = min(1., len(tests) * min(t[2] for t in tests))
+            detail = {"adjacent_differences": [t[0] for t in tests],
+                      "hypothesis": "all adjacent dose differences have the frozen direction"}
         elif assertion.kind == "peak":
             low, high = assertion.peak_range
-            inside = [h for h in (1, 3, 5, 10) if low <= h <= high]
-            outside = [h for h in (1, 3, 5, 10) if h not in inside]
-            means = {h: measured[f"ic_e1_h{h}"].ic.mean() for h in (1, 3, 5, 10)}
-            peak = max(means, key=lambda h: means[h] if np.isfinite(means[h]) else -np.inf)
-            # 对所有对手同步检验，避免看完峰值后只挑最容易打败的周期。
-            comparisons = {str(h): summarize(measured[f"ic_e1_h{peak}"].ic - measured[f"ic_e1_h{h}"].ic,
-                                             max(peak, h), config) for h in means if h != peak}
-            resolved = all(_assertion_state(item) == "hold" for item in comparisons.values())
-            state = ("hold" if peak in inside else "violated") if resolved and outside else "untested"
-            detail = {"peak": peak, "comparisons": comparisons, "reason": "峰值区间与竞争周期不可区分时不判成立"}
+            inside = [h for h in (1,3,5,10) if low <= h <= high]
+            outside = [h for h in (1,3,5,10) if h not in inside]
+            comparisons = {}
+            if inside and outside:
+                for hi in inside:
+                    for ho in outside:
+                        comparisons[(hi,ho)] = directional(
+                            measured[f"ic_e1_h{hi}"].ic - measured[f"ic_e1_h{ho}"].ic,
+                            max(hi,ho), assertion.tolerance)
+                # There exists an inside horizon beating every outside horizon.
+                # The minimization is explicitly corrected; no selected winner p-value.
+                support = min(1., len(inside) * min(
+                    max(comparisons[(hi,ho)][1] for ho in outside) for hi in inside))
+                contradiction = min(1., len(outside) * min(
+                    max(comparisons[(hi,ho)][2] for hi in inside) for ho in outside))
+            detail = {"comparisons": {f"{hi}_vs_{ho}": t[0] for (hi,ho),t in comparisons.items()},
+                      "hypothesis": "maximum IC within frozen horizon interval exceeds maximum outside",
+                      "selection_correction": "union bound over candidate winning horizons"}
         else:
             moderator = panel.fields.get(assertion.subject)
             if moderator is None:
-                state, detail = "untested", {"reason": f"缺少旁证字段 {assertion.subject}"}
+                detail = {"reason": f"缺少旁证字段 {assertion.subject}"}
             else:
-                high_ic = daily_ic(signal.where(moderator >= 70), returns, config.min_cross_section)
-                low_ic = daily_ic(signal.where(moderator <= 30), returns, config.min_cross_section)
-                summary = summarize((high_ic - low_ic) * assertion.direction, horizon, config)
-                state, detail = _assertion_state(summary, assertion.tolerance), summary
+                if assertion.subject == structure.lineage.get("moderator") and "ungated_signal" in measured:
+                    source_signal = measured["ungated_signal"]
+                    threshold = float(measured["condition_cut"].value.iloc[0])
+                    high_mask, low_mask = moderator > threshold, moderator <= threshold
+                else:
+                    source_signal = signal
+                    high_mask, low_mask = moderator >= 70, moderator <= 30
+                high_ic = daily_ic(source_signal.where(high_mask), returns, config.min_cross_section)
+                low_ic = daily_ic(source_signal.where(low_mask), returns, config.min_cross_section)
+                detail, support, contradiction = directional((high_ic-low_ic) * assertion.direction,
+                                                             horizon, assertion.tolerance)
+        state = "hold" if support < .025 else "violated" if contradiction < .025 else "untested"
         result.append({"id": assertion.id, "kind": assertion.kind, "subject": assertion.subject,
-                       "state": state, "detail": detail, "attribution": assertion.attribution})
+                       "state": state, "p_support": support, "p_contradiction": contradiction,
+                       "detail": detail, "attribution": assertion.attribution})
     return result
 
 

@@ -6,9 +6,9 @@
 
 - Python 3.11，项目 `.venv`；Node/npm 同样位于 `.venv/bin`。
 - `.env` 是服务器私有文件，权限 600，Git 忽略；按 `.env.example` 的变量名配置，不将值写入报告或命令历史。
-- `API_KEY` 或 `DEEPSEEK_API_KEY`；官方 HTTPS 地址，模型由 `DEEPSEEK_MODEL` 指定。
+- `API_KEY` 或 `DEEPSEEK_API_KEY`；官方 HTTPS 地址；盲押/对齐由 `DEEPSEEK_MODEL` 指定，提案/操作化/审核/归纳使用 `DEEPSEEK_REASONING_MODEL`（默认 deepseek-v4-pro，开启思考）。
 - 原始 Parquet 不改写。行情缓存、模型响应、审计、因子、日志、截图均在服务器 `artifacts/`。
-- `provider=llm` 由模型生成机制、选择基础信号与方向、提出独立旁证；标签和表达式语法由注册表约束。`hybrid` 是四个固定基线加模型盲押/对齐，不能称为模型自由搜索。
+- `provider=llm` 由模型生成机制、选择基础信号与方向、提出独立旁证；标签和表达式语法由注册表约束。`hybrid` 前四个使用固定析因基线，之后由模型提出新结构；`llm` 从第一项即使用模型提案。
 
 ## 运行探索
 
@@ -40,7 +40,7 @@ bash scripts/start-workbench.sh
 
 工作台支持提交受限参数的探索任务、自动刷新状态和查看结构测量。API 同时提供：
 - `GET /api/jobs`：最近任务；
-- `POST /api/jobs`：JSON 参数 provider、max_symbols、max_structures、workers、engineering、industry_policy、industry_source、auction_policy；
+- `POST /api/jobs`：JSON 参数 provider、max_symbols、max_structures、workers、engineering、industry_policy、industry_source、auction_policy、data_profile、discovery、bayes；
 - 运行中提交返回 409；参数无效返回 422；不接受路径、命令或密钥参数。
 
 任务记录/日志位于 `artifacts/jobs/`；服务 PID/日志位于 `artifacts/services/`。
@@ -95,3 +95,17 @@ A 段共 1458 个交易日、5,479,320 条返回记录；请求证券清单为�
 industry_policy 不再需要为了解决竞价异常而放宽；auction_policy 省略时
 继承原行业策略，以保持旧命令行为。工作台提供对应独立选项。
 竞价隔离仍会阻止正式候选晋级，行业通过不代表整个数据集或因子已通过。
+
+## 七形式与完整研究循环
+
+日线研究必须在新批次启动前冻结范围。它不读取或登记竞价字段，不能借此晋级竞价相关因子。
+
+    python run_engine.py --run-id daily-research-NEW \
+      --industry-source rqdata_daily --industry-policy strict --data-profile daily \
+      --provider llm --max-symbols 0 --max-structures 12 --workers 8 --discovery --bayes
+
+提案经三次尝试仍不合规则记录拒绝并消耗一个提案预算，不计算其收益。通过登记的后续结构仍需新 ID、冻结和完整测量。相同表达式换机制标签不作为新的独立测量。
+
+新增验证入口：scripts/validate_proposal_forms.py、scripts/validate_form_registration.py、scripts/validate_inference_suite.py、scripts/validate_memory_recovery.py。前两项分别验证真实模型事前审核和 A 特征登记；不能解释为因子验证。
+
+backtest/execute_research_target.py 可将 A 段 research-factor.parquet 投影为固定多头目标并用 RQAlpha 执行 T+1 开盘。它只提供研究执行诊断；未完全成交即作废，不授予正式策略资格。

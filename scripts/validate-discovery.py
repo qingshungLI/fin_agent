@@ -21,9 +21,16 @@ frame = pd.DataFrame({
     "industry": np.tile([f"I{i%5}" for i in range(stocks)], dates),
     "moderator": moderator})
 cuts = {"median": {"field": "moderator", "value": 50, "side": "high"}}
-forest = forest_propose(frame, ["moderator"], cuts, ResearchConfig())
+from time import perf_counter
+start=perf_counter()
+forest = forest_propose(frame, ["moderator"], cuts, ResearchConfig(workers=1))
+one_seconds=perf_counter()-start
+start=perf_counter()
+parallel = forest_propose(frame, ["moderator"], cuts, ResearchConfig(workers=8))
+parallel_seconds=perf_counter()-start
+assert forest == parallel, "Worker count changed frozen forest output"
 icm = blade_icm(frame, "moderator", 50, 5, ResearchConfig())
-result = {"forest": {k:v for k,v in forest.items() if k != "internal_leaf_effects"},
+result = {"worker_count_deterministic": True, "one_seconds": one_seconds, "parallel_seconds":parallel_seconds, "forest": {k:v for k,v in forest.items() if k != "internal_leaf_effects"},
           "icm": icm,
           "scope": "Strong synthetic interaction runtime; not calibrated discovery recovery or real factor evidence"}
 Path("artifacts/validation/discovery-runtime.json").write_text(json.dumps(result, indent=2))

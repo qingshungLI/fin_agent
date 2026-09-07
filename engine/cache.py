@@ -28,7 +28,7 @@ def cached_panel(data_root, config, cache_root, *, start=None, end=None):
     code = {p.name: file_hash(p) for p in [Path(__file__).parent / name for name in ("data.py", "config.py", "cache.py")]}
     identity = {"data": inputs, "code": code, "config": config.model_dump(include={
                     "start", "end", "max_symbols", "seed", "industry_policy", "industry_source", "auction_policy",
-                    "commission_bp", "slippage_bp"}),
+                    "commission_bp", "slippage_bp", "data_profile"}),
                 "start": start, "end": end}
     key = digest(identity)
     target = cache_root / key

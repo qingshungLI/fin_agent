@@ -42,10 +42,10 @@ def test_llm_retries_and_never_persists_secret(tmp_path, monkeypatch):
 
 def test_batch_holm_and_necessary_conditions():
     rows = [
-        {"id": "A", "p": .001, "assertions": [{"state": "hold"}]},
+        {"id": "A", "p": .001, "assertions": [{"state": "hold", "p_support": .001}]},
         {"id": "B", "p": .001, "assertions": [{"state": "violated"}]},
         {"id": "C", "p": .001, "assertions": [{"state": "untested"}]},
-        {"id": "D", "p": .9, "assertions": [{"state": "hold"}]},
+        {"id": "D", "p": .9, "assertions": [{"state": "hold", "p_support": .001}]},
     ]
     decisions = batch_decisions(rows)
     assert [r["verdict"] for r in decisions] == ["PASS", "FAIL", "UNDECIDABLE", "UNDECIDABLE"]
