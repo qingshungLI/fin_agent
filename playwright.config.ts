@@ -3,6 +3,6 @@ export default defineConfig({
   testDir: './tests/browser',
   outputDir: './artifacts/browser-tests',
   timeout: 30000,
-  use: { browserName: 'chromium', headless: true, launchOptions: { executablePath: '/data1/yuxiao/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome' } },
+  use: { browserName: 'chromium', headless: true, launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } },
   reporter: 'list',
 });

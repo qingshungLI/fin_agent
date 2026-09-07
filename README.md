@@ -1,6 +1,6 @@
 # AutoAlpha Harness
 
-**服务器运行说明见 [SERVER_RUNBOOK.md](SERVER_RUNBOOK.md)，当前验收与未完成项见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。设计目标不代表已取得正式因子结论。**
+**当前验收与未完成项见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。设计目标不代表已取得正式因子结论。**
 
 **一个用证伪压力驱动的自动化因子研究系统。**
 
