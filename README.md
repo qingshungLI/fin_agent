@@ -446,11 +446,17 @@ CPU 密集任务通过受控进程池并行，I/O 通过异步组件处理；任
 ## 十一、代码结构
 
 ```
-src/types.ts  组件契约、horizon、结构、测量、判定和回测类型
-src/core.ts   数据校验、面板、结构冻结、测量、Holm、经典多头回测
-src/main.ts   主流程编排、合成 demo、DataSource 注入
+engine/config.py    显式日期、成本和数据配置
+engine/data.py      PyArrow 分区读取、状态连接、PIT 复权、数据质量闸门
+engine/factors.py   已登记的日频量价因子
+engine/metrics.py   IC、TB、HAC t、regime 和影响分解
+engine/pipeline.py  结构化 JSON/Parquet 产出
+run_engine.py       真实研究入口
+src/schema.ts       前端与 Python 产物共享的 TypeScript 契约
 ```
 
-所有组件通过显式输入输出连接；策略、成本、滑点和数据校验可以替换。文件数量保持最少，无状态计算集中在 `src/core.ts`，状态编排集中在 `src/main.ts`。
+所有组件通过显式输入输出连接；策略、成本、数据校验和后续森林/层次模型可以替换。Python 是唯一研究引擎，TypeScript 不承担数据或统计计算。
 
-当前后端实现已迁移为 TypeScript：`src/types.ts` 定义组件契约，`src/core.ts` 提供数据校验、面板、结构冻结、测量、Holm 批次接口和多头回测，`src/main.ts` 负责编排。运行 `npm run demo` 可用确定性合成数据跑通完整纵向流程。真实 Parquet 适配器、复权事件映射、PIT 行业连接和正式统计检验仍按 `TODO` 接入，不会用合成数据结果替代真实结论。
+当前后端由 Python `engine/` 负责：数据校验、PIT 状态和复权、注册因子、IC/TB/HAC、影响分解、结构化 JSON/Parquet 产出。TypeScript `src/schema.ts` 只定义前后端共享契约，未来前端直接消费引擎产物。真实引擎默认拒绝未经核验的口径，不会用合成数据结果替代真实结论。
+
+运行方式：`python run_engine.py --data-root D:\\finance_agent\\data --output-root artifacts`。正式运行会读取真实 Parquet；复权方向、状态表、PIT 行业任一校验失败都会终止。当前单结构命令只负责真实测量和产出，B/H 正式确认、森林和层次模型在各自依赖通过统计验收后接入，不会把未实现部分伪装成 PASS。

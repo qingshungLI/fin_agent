@@ -6,3 +6,7 @@ dist/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+artifacts/
+.ruff_cache/
+playwright-results/
