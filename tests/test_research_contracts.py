@@ -141,7 +141,7 @@ def test_resume_rejects_tampered_frozen_cut_before_loading_market_data(tmp_path,
     write_json(folder / "checkpoint.json", {
         "status": "COMPLETED", "run_id": "resume-test", "completed": [],
         "identity": {"config": config.model_dump(), "data_root": str(data.resolve()),
-                     "discovery": False, "bayes": False, "code": {}, "sources": {}},
+                     "discovery": False, "bayes": False, "model": None, "code": {}, "sources": {}},
         "artifact_hashes": {"cuts.json": file_hash(cut)}})
     write_json(cut, {"fixed": 70})
     monkeypatch.setattr(pipeline, "ROOT", root)
@@ -178,3 +178,14 @@ def test_daily_ic_against_independent_scipy_with_gaps_ties_and_constants(rank):
         expected.append(pearsonr(a,b).statistic)
     actual = daily_ic(pd.DataFrame(x), pd.DataFrame(y), rank=rank)
     np.testing.assert_allclose(actual, expected, atol=1e-12, rtol=0, equal_nan=True)
+
+
+def test_model_identity_excludes_credentials_and_changes_with_model(tmp_path):
+    env=tmp_path/".env"
+    env.write_text("API_KEY=first-test-secret\n")
+    first=DeepSeek(tmp_path/"cache",env).configuration_identity()
+    env.write_text("API_KEY=rotated-test-secret\n")
+    assert DeepSeek(tmp_path/"cache",env).configuration_identity()==first
+    assert "secret" not in json.dumps(first)
+    env.write_text("API_KEY=rotated-test-secret\nDEEPSEEK_REASONING_MODEL=deepseek-v4-pro\n")
+    assert DeepSeek(tmp_path/"cache",env).configuration_identity()!=first

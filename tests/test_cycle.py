@@ -163,6 +163,7 @@ def test_rejected_priors_consume_budget_once_and_resume_without_remeasurement(tm
     panel=MarketPanel({"close":pd.DataFrame({"S":[1.,2.]},index=pd.bdate_range("2020-01-01",periods=2))},{},[],{})
     calls=[]
     class RejectingModel:
+        def configuration_identity(self): return {"model": "initial-test-model"}
         def __init__(self,*args,**kwargs): pass
         def propose(self,*args,**kwargs):
             calls.append(1)
@@ -181,3 +182,8 @@ def test_rejected_priors_consume_budget_once_and_resume_without_remeasurement(tm
     assert len(calls)==3
     resumed=pipeline.run_research(config,"rejected",data,root/"artifacts")
     assert resumed==result and len(calls)==3
+
+    monkeypatch.setattr(RejectingModel,"configuration_identity",lambda self:{"model":"changed-test-model"})
+    with pytest.raises(ValueError,match="Resume requires unchanged"):
+        pipeline.run_research(config,"rejected",data,root/"artifacts")
+    assert len(calls)==3

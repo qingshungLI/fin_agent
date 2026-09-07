@@ -12,6 +12,22 @@ from scipy import stats
 from scipy.integrate import trapezoid
 
 
+
+def interaction_contrasts(frame: pd.DataFrame):
+    """Orthogonal cell contrasts on the observed family/form support.
+
+    Missing cells are not fabricated. The residual cell space is orthogonal to
+    family/form main effects, so interactions cannot duplicate those columns.
+    """
+    from scipy.linalg import null_space
+    cells = frame[["family", "form"]].astype(str).drop_duplicates().sort_values(["family", "form"])
+    names = (cells.family + ":" + cells.form).tolist()
+    main = np.column_stack([np.ones(len(cells)),
+                            pd.get_dummies(cells, drop_first=True, dtype=float).to_numpy()])
+    basis = null_space(main.T)
+    codes = pd.Categorical(frame.family.astype(str) + ":" + frame.form.astype(str), categories=names).codes
+    return basis, names, codes
+
 def build_design_matrix(frame: pd.DataFrame, stage: str) -> tuple[np.ndarray, list[str]]:
     """生成有基准水平的设计矩阵；输入季度档案及阶段，返回矩阵/列名。"""
     if frame.empty or not {"family", "form", "period", "structure"} <= set(frame):
@@ -19,7 +35,9 @@ def build_design_matrix(frame: pd.DataFrame, stage: str) -> tuple[np.ndarray, li
     terms = ["period"] if stage == "A" else ["period", "family", "form"]
     design = pd.get_dummies(frame[terms].astype(str), drop_first=True, dtype=float)
     if stage == "C":
-        interaction = pd.get_dummies(frame.family.astype(str) + ":" + frame.form.astype(str), drop_first=True, dtype=float)
+        basis, _, codes = interaction_contrasts(frame)
+        interaction = pd.DataFrame(basis[codes], index=frame.index,
+                                   columns=[f"interaction_contrast_{i}" for i in range(basis.shape[1])])
         design = pd.concat([design, interaction], axis=1)
     return np.column_stack([np.ones(len(frame)), design]), ["intercept", *design.columns]
 
@@ -73,10 +91,11 @@ def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000, covari
     encodings = {key: pd.Categorical(frame[key].astype(str), categories=values).codes for key, values in categories.items()}
     groups = ["period", "structure"] + (["family", "form"] if stage != "A" else [])
     if stage == "C":
-        frame["interaction"] = frame.family.astype(str) + ":" + frame.form.astype(str)
-        categories["interaction"] = sorted(frame.interaction.unique())
-        encodings["interaction"] = pd.Categorical(frame.interaction, categories=categories["interaction"]).codes
-        groups.append("interaction")
+        interaction_basis, names, codes = interaction_contrasts(frame)
+        if interaction_basis.shape[1]:
+            categories["interaction"] = names
+            encodings["interaction"] = codes
+            groups.append("interaction")
     groups = [group for group in groups if len(categories[group]) > 1]
     group_design = {group: np.eye(len(categories[group]))[encodings[group]] for group in groups}
     observed = frame["mean"].to_numpy()
@@ -95,8 +114,13 @@ def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000, covari
         predictor = intercept * mu
         for group in groups:
             scale = pm.HalfNormal("sigma_" + group, sigma=0.02)
-            raw = pm.ZeroSumNormal("raw_" + group, sigma=1, dims=group)
-            effect = pm.Deterministic("effect_" + group, raw * scale, dims=group)
+            if group == "interaction":
+                raw = pm.Normal("raw_interaction", sigma=1, shape=interaction_basis.shape[1])
+                effect = pm.Deterministic("effect_interaction",
+                                          pm.math.dot(interaction_basis, raw) * scale, dims=group)
+            else:
+                raw = pm.ZeroSumNormal("raw_" + group, sigma=1, dims=group)
+                effect = pm.Deterministic("effect_" + group, raw * scale, dims=group)
             predictor = predictor + pm.math.dot(group_design[group], effect)
         pm.Normal("observed", predictor, sigma=frame.se.to_numpy() if covariance is None else 1.,
                   observed=observed)

@@ -48,7 +48,7 @@ class DeepSeek:
         if self.base != "https://api.deepseek.com":
             raise ValueError("Only the configured DeepSeek HTTPS endpoint is permitted")
         self.model = values.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-        self.reasoning_model = values.get("DEEPSEEK_REASONING_MODEL", "deepseek-v4-pro")
+        self.reasoning_model = values.get("DEEPSEEK_REASONING_MODEL", "deepseek-v4-flash")
         if {self.model, self.reasoning_model} - {"deepseek-v4-flash", "deepseek-v4-pro"}:
             raise ValueError("Unsupported DeepSeek model configuration")
         self.root = root
@@ -56,6 +56,13 @@ class DeepSeek:
         self.calls = 0
         import threading
         self.lock = threading.Lock()
+
+    def configuration_identity(self) -> dict[str, Any]:
+        """Public model settings only; key rotation does not alter research identity."""
+        return {"base_url": self.base, "model": self.model,
+                "reasoning_model": self.reasoning_model, "reasoning_effort": "high",
+                "thinking_roles": ["proposer", "operationalizer", "reviewer", "inducer"],
+                "request_version": 3}
 
     def request(self, role: str, context: dict[str, Any], instruction: str, nonce: str = "") -> Any:
         role_context(role, **context)

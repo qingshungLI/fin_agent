@@ -140,8 +140,10 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
     store = AuditStore(audit_root)
     folder = root / run_id
     folder.mkdir(parents=True, exist_ok=True)
+    llm = DeepSeek(audit_root / "llm-cache", max_calls=config.llm_max_calls) if config.provider in {"llm", "hybrid"} else None
     identity = {"config": config.model_dump(), "data_root": str(data_root.resolve()),
                 "discovery": discovery, "bayes": bayes,
+                "model": llm.configuration_identity() if llm else None,
                 "code": {p.name: file_hash(p) for p in sorted((ROOT / "engine").glob("*.py"))},
                 "sources": {str(p.relative_to(data_root)): file_hash(p)
                             for p in sorted(data_root.rglob("*.parquet"))}}
@@ -190,7 +192,6 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
             "data-quality.json": file_hash(folder / "data-quality.json"),
         })
         write_json(checkpoint, state)
-        llm = DeepSeek(audit_root / "llm-cache", max_calls=config.llm_max_calls) if config.provider in {"llm", "hybrid"} else None
         rows = [json.loads((folder / sid / "result.json").read_text()) for sid in state["completed"]]
         signal_library = []
         fingerprints = set()
