@@ -40,6 +40,10 @@ def health() -> dict[str, Any]:
 def overview() -> dict[str, Any]:
     """返回工作台总览；无参数，只公开已落盘指标和严格阻断状态。"""
     result = read_json("overview.json", {})
+    failure = read_json("failure.json", None)
+    if failure and not result:
+        result = {"status": "BLOCKED", "message": failure["error"],
+                  "report": [{"name": failure["error"], "status": "fail", "count": 1}]}
     result.setdefault("map", build_map())
     result.setdefault("status", "NOT_RUN")
     result.setdefault("message", "尚未运行研究批次；正式数据检查失败时不会生成 PASS")

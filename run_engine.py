@@ -5,7 +5,6 @@
 
 import argparse
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 import traceback
 
@@ -13,7 +12,6 @@ from engine.audit import AuditStore, write_json
 from engine.catalog import build_map, seed_structure, register_cell, freeze_cuts
 from engine.config import ResearchConfig
 from engine.data import build_panel
-from engine.dsl import evaluate
 from engine.metrics import measure_panel, power_budget
 from engine.blades import run_blades
 
