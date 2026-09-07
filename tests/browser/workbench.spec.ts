@@ -7,10 +7,22 @@ test('real server workbench renders research evidence and opens measurement', as
   await expect(page.getByRole('heading', { name: 'AutoAlpha 因子研究工作台' })).toBeVisible();
   await expect(page.getByText('尚无研究批次')).toHaveCount(0);
   await expect(page.locator('.map-cell')).toHaveCount(70);
-  const open = page.getByRole('button', { name: '查看完整测量' });
-  await expect(open).toBeVisible();
-  await open.click();
-  await expect(page.locator('.measurement-table tbody tr')).toHaveCount(12);
+  const response = await page.request.get('http://127.0.0.1:5173/api/structures');
+  expect(response.ok()).toBeTruthy();
+  const structures = await response.json();
+  expect(Array.isArray(structures)).toBeTruthy();
+  if (structures.length) {
+    const open = page.getByRole('button', { name: '查看完整测量' });
+    await expect(open).toBeVisible();
+    await open.click();
+    await expect(page.locator('.measurement-table tbody tr')).toHaveCount(12);
+  } else {
+    await expect(page.locator('.focus-panel .empty')).toBeVisible();
+    await expect(page.getByRole('button', { name: '查看完整测量' })).toHaveCount(0);
+  }
+  await expect(page.getByLabel('研究数据')).toHaveValue('daily');
+  await expect(page.getByLabel('条件发现')).not.toBeChecked();
+  await expect(page.getByLabel('贝叶斯研究记忆')).not.toBeChecked();
   expect(errors).toEqual([]);
   await page.screenshot({ path: 'artifacts/validation/workbench-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

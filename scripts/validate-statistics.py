@@ -8,6 +8,7 @@ from scipy.stats import beta
 from engine.config import ResearchConfig
 from engine.metrics import summarize, holm
 from engine.discovery import blade_icm
+from engine.cache import file_hash
 
 
 def experiment(seed):
@@ -43,6 +44,8 @@ def icm_experiment(seed):
 
 
 def main():
+    sources=[Path("engine")/n for n in ("metrics.py","discovery.py","config.py","evidence.py")]
+    before={p.name:file_hash(p) for p in sources}
     with ProcessPoolExecutor(max_workers=4) as pool:
         fwer = list(pool.map(experiment, range(30000,30200)))
         icm = list(pool.map(icm_experiment, range(40000,40200)))
@@ -53,6 +56,9 @@ def main():
               "scope": "correlated AR(1) null main tests and linear-nuisance ICM; synthetic only"}
     report["passed"] = report["holm_upper95"] < .09 and report["icm_upper95"] < .09
     report["limitations"] = "Does not certify real-data quality, all alternatives, or M9 hierarchy recovery."
+    assert before=={p.name:file_hash(p) for p in sources}
+    report["code_sha256"]=before
+    report["uses_market_data"]=False
     Path("artifacts/validation/statistics-batch-revised.json").write_text(json.dumps(report,indent=2))
     print(report, flush=True)
 
