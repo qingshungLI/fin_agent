@@ -9,7 +9,24 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.integrate import trapezoid
 
+
+
+def interaction_contrasts(frame: pd.DataFrame):
+    """Orthogonal cell contrasts on the observed family/form support.
+
+    Missing cells are not fabricated. The residual cell space is orthogonal to
+    family/form main effects, so interactions cannot duplicate those columns.
+    """
+    from scipy.linalg import null_space
+    cells = frame[["family", "form"]].astype(str).drop_duplicates().sort_values(["family", "form"])
+    names = (cells.family + ":" + cells.form).tolist()
+    main = np.column_stack([np.ones(len(cells)),
+                            pd.get_dummies(cells, drop_first=True, dtype=float).to_numpy()])
+    basis = null_space(main.T)
+    codes = pd.Categorical(frame.family.astype(str) + ":" + frame.form.astype(str), categories=names).codes
+    return basis, names, codes
 
 def build_design_matrix(frame: pd.DataFrame, stage: str) -> tuple[np.ndarray, list[str]]:
     """生成有基准水平的设计矩阵；输入季度档案及阶段，返回矩阵/列名。"""
@@ -18,7 +35,9 @@ def build_design_matrix(frame: pd.DataFrame, stage: str) -> tuple[np.ndarray, li
     terms = ["period"] if stage == "A" else ["period", "family", "form"]
     design = pd.get_dummies(frame[terms].astype(str), drop_first=True, dtype=float)
     if stage == "C":
-        interaction = pd.get_dummies(frame.family.astype(str) + ":" + frame.form.astype(str), drop_first=True, dtype=float)
+        basis, _, codes = interaction_contrasts(frame)
+        interaction = pd.DataFrame(basis[codes], index=frame.index,
+                                   columns=[f"interaction_contrast_{i}" for i in range(basis.shape[1])])
         design = pd.concat([design, interaction], axis=1)
     return np.column_stack([np.ones(len(frame)), design]), ["intercept", *design.columns]
 
@@ -29,16 +48,33 @@ def prior_overlap(samples: np.ndarray, prior: np.ndarray) -> float:
         return 1.0
     grid = np.linspace(min(np.quantile(samples, 0.001), np.quantile(prior, 0.001)),
                        max(np.quantile(samples, 0.999), np.quantile(prior, 0.999)), 250)
-    return float(np.clip(np.trapz(np.minimum(stats.gaussian_kde(samples)(grid),
+    return float(np.clip(trapezoid(np.minimum(stats.gaussian_kde(samples)(grid),
                                              stats.gaussian_kde(prior)(grid)), grid), 0, 1))
 
 
-def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000) -> dict[str, Any]:
+
+def whiten_measurements(observed, design, covariance):
+    """Exact fixed-covariance likelihood transform, computed once outside NUTS."""
+    from scipy.linalg import solve_triangular
+    chol = np.linalg.cholesky(covariance)
+    return (solve_triangular(chol, np.asarray(observed, dtype=float), lower=True),
+            solve_triangular(chol, np.asarray(design, dtype=float), lower=True))
+
+def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000, covariance=None) -> dict[str, Any]:
     """拟合 HalfNormal 尺度层次模型；输入季度效应表，返回后验诊断，四链收敛后才解读。"""
     if frame.empty or frame.structure.nunique() < 2:
         return {"state": "UNIDENTIFIABLE", "reason": "至少需要两个不同结构", "terms": []}
-    frame = frame.dropna(subset=["mean", "se"])
-    frame = frame[frame.se > 0].copy()
+    valid_rows = frame["mean"].notna() & frame.se.notna() & (frame.se > 0)
+    if covariance is not None:
+        covariance = np.asarray(covariance, dtype=float)
+        if covariance.shape != (len(frame),len(frame)) or not np.isfinite(covariance).all():
+            raise ValueError("Measurement covariance shape or values invalid")
+        positions = np.flatnonzero(valid_rows.to_numpy())
+        covariance = covariance[np.ix_(positions,positions)]
+        if not np.allclose(covariance,covariance.T):
+            raise ValueError("Measurement covariance must be symmetric")
+        np.linalg.cholesky(covariance)
+    frame = frame.loc[valid_rows].copy()
     if len(frame) < 12:
         return {"state": "UNIDENTIFIABLE", "reason": "有效季度测量不足", "terms": []}
     count = frame.structure.nunique()
@@ -48,30 +84,51 @@ def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000) -> dic
     if rank < design.shape[1]:
         return {"state": "UNIDENTIFIABLE", "reason": "族/形式设计矩阵欠秩，优先补充析因格",
                 "rank": rank, "columns": len(columns), "terms": []}
-    import pymc as pm
     import arviz as az
+    import pymc as pm
 
     categories = {key: sorted(frame[key].astype(str).unique()) for key in ("structure", "period", "family", "form")}
     encodings = {key: pd.Categorical(frame[key].astype(str), categories=values).codes for key, values in categories.items()}
     groups = ["period", "structure"] + (["family", "form"] if stage != "A" else [])
     if stage == "C":
-        frame["interaction"] = frame.family.astype(str) + ":" + frame.form.astype(str)
-        categories["interaction"] = sorted(frame.interaction.unique())
-        encodings["interaction"] = pd.Categorical(frame.interaction, categories=categories["interaction"]).codes
-        groups.append("interaction")
+        interaction_basis, names, codes = interaction_contrasts(frame)
+        if interaction_basis.shape[1]:
+            categories["interaction"] = names
+            encodings["interaction"] = codes
+            groups.append("interaction")
+    groups = [group for group in groups if len(categories[group]) > 1]
+    group_design = {group: np.eye(len(categories[group]))[encodings[group]] for group in groups}
+    observed = frame["mean"].to_numpy()
+    intercept = np.ones(len(frame))
+    if covariance is not None:
+        full_design = np.column_stack([intercept, *group_design.values()])
+        observed, transformed = whiten_measurements(observed, full_design, covariance)
+        intercept = transformed[:, 0]
+        offset = 1
+        for group in groups:
+            width = len(categories[group])
+            group_design[group] = transformed[:, offset:offset+width]
+            offset += width
     with pm.Model(coords=categories):
         mu = pm.Normal("mu", 0, 0.05)
-        predictor = mu
+        predictor = intercept * mu
         for group in groups:
             scale = pm.HalfNormal("sigma_" + group, sigma=0.02)
-            raw = pm.Normal("raw_" + group, 0, 1, dims=group)
-            effect = pm.Deterministic("effect_" + group, (raw - pm.math.mean(raw)) * scale, dims=group)
-            predictor = predictor + effect[encodings[group]]
-        pm.Normal("observed", predictor, sigma=frame.se.to_numpy(), observed=frame["mean"].to_numpy())
+            if group == "interaction":
+                raw = pm.Normal("raw_interaction", sigma=1, shape=interaction_basis.shape[1])
+                effect = pm.Deterministic("effect_interaction",
+                                          pm.math.dot(interaction_basis, raw) * scale, dims=group)
+            else:
+                raw = pm.ZeroSumNormal("raw_" + group, sigma=1, dims=group)
+                effect = pm.Deterministic("effect_" + group, raw * scale, dims=group)
+            predictor = predictor + pm.math.dot(group_design[group], effect)
+        pm.Normal("observed", predictor, sigma=frame.se.to_numpy() if covariance is None else 1.,
+                  observed=observed)
         trace = pm.sample(draws=draws, tune=draws, chains=4, cores=1, random_seed=seed,
-                          target_accept=0.95, progressbar=False, return_inferencedata=True)
+                          target_accept=0.99, progressbar=False, return_inferencedata=True)
         prior = pm.sample_prior_predictive(samples=1000, random_seed=seed)
-    diagnostic = az.summary(trace, var_names=["mu", *["sigma_" + key for key in groups]])
+    diagnostic = az.summary(trace, var_names=["mu", *["sigma_" + key for key in groups],
+                                            *["effect_" + key for key in groups]])
     divergence = int(trace.sample_stats.diverging.sum())
     max_rhat = float(diagnostic.r_hat.max())
     min_ess = float(diagnostic.ess_bulk.min())
@@ -91,7 +148,9 @@ def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000) -> dic
     return {"state": "RESEARCH_ONLY" if valid else "UNIDENTIFIABLE", "stage": stage,
             "terms": terms, "rhat": max_rhat, "ess": min_ess, "divergences": divergence,
             "rank": rank, "columns": len(columns),
-            "dependence_warning": "结构共享股票日期，当前似然未建模完整跨结构测量协方差；不得用于正式判定"}
+            "measurement_covariance": "supplied joint covariance" if covariance is not None else "diagonal approximation",
+            "dependence_warning": "仅估计同季度共享日期的测量协方差；季度边界相关性仍需敏感性检查"
+                                  if covariance is not None else "未提供联合测量协方差；不得用于正式判定"}
 
 
 def next_probe(map_cells: list[dict[str, Any]], posterior: dict[str, Any], visited: set[str]) -> dict[str, Any] | None:

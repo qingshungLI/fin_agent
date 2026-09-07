@@ -10,3 +10,16 @@ __pycache__/
 artifacts/
 .ruff_cache/
 playwright-results/
+
+*.egg-info/
+build/
+.env.*
+!.env.example
+
+# Licensed vendor responses are private runtime artifacts.
+data/industry_sws_daily/
+
+# Private deployment and operations notes.
+SERVER_RUNBOOK.md
+*_SERVER_RUNBOOK.md
+.local-ops/

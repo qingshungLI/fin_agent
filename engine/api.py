@@ -3,20 +3,21 @@
 API 不在请求线程读取全量行情；正式运行通过 CLI 生成 artifacts，再由此服务展示冻结产物。
 """
 
+import json
 from pathlib import Path
 from typing import Any
-import json
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from engine.audit import AuditStore
 from engine.catalog import build_map
+from server_jobs import RunRequest
 
 ARTIFACT_ROOT = Path("artifacts")
 app = FastAPI(title="AutoAlpha Research API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-                   allow_methods=["GET"], allow_headers=["*"])
+                   allow_methods=["GET", "POST"], allow_headers=["*"])
 
 
 def read_json(name: str, default: Any) -> Any:
@@ -74,3 +75,23 @@ def structure_detail(structure_id: str) -> dict[str, Any]:
         if row.get("id") == structure_id:
             return row
     raise HTTPException(status_code=404, detail="结构不存在")
+
+
+@app.get("/api/jobs")
+def jobs():
+    from server_jobs import list_jobs
+    return list_jobs()
+
+
+@app.post("/api/jobs", status_code=202)
+def create_job(options: "RunRequest", request: Request):
+    # Only same-origin workbench or direct local clients; never execute shell input.
+    origin = request.headers.get("origin")
+    if origin and origin not in {"http://localhost:5173", "http://127.0.0.1:5173",
+                                 "http://localhost:8000", "http://127.0.0.1:8000"}:
+        raise HTTPException(status_code=403, detail="仅允许服务器本机工作台提交")
+    from server_jobs import launch
+    try:
+        return launch(options)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail="已有研究任务正在运行，请等待完成") from exc

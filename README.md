@@ -1,5 +1,7 @@
 # AutoAlpha Harness
 
+**当前验收与未完成项见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。设计目标不代表已取得正式因子结论。**
+
 **一个用证伪压力驱动的自动化因子研究系统。**
 
 它不产出因子排行榜。它产出三样东西：

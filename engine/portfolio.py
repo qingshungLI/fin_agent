@@ -44,9 +44,12 @@ def position_path(weights: pd.DataFrame, peak_horizon: int) -> pd.DataFrame:
     if peak_horizon not in (1, 3, 5, 10):
         raise ValueError("只支持登记的 horizon")
     output = pd.DataFrame(0.0, index=weights.index, columns=weights.columns)
+    covered = pd.DataFrame(False, index=weights.index, columns=weights.columns)
     for offset in range(peak_horizon):
-        output = output.add(weights.shift(offset).fillna(0) * (1 - offset / peak_horizon), fill_value=0)
-    return output
+        shifted = weights.shift(offset)
+        covered |= shifted.notna()
+        output = output.add(shifted.fillna(0) * (1 - offset / peak_horizon), fill_value=0)
+    return output.where(covered)
 
 
 def assemble_portfolio(structures: list[dict[str, Any]], paths: list[pd.DataFrame]) -> dict[str, Any]:

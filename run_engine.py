@@ -1,72 +1,49 @@
-"""研究主入口：执行验证、A 段最小研究批次、审计与 JSON 产物。
-
-默认严格模式会在源数据违反 M1 契约时退出；engineering 模式仅用于开发诊断，不能生成正式 PASS。
-"""
-
+"""Server-only durable research command."""
 import argparse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-import traceback
 
-from engine.audit import AuditStore, write_json
-from engine.catalog import build_map, seed_structure, register_cell, freeze_cuts
 from engine.config import ResearchConfig
-from engine.data import build_panel
-from engine.metrics import measure_panel, power_budget
-from engine.blades import run_blades
+from engine.pipeline import run_research
 
 
-def main() -> int:
-    """运行一个可审计研究批次；返回进程码，错误写入 failure.json 后退出非零。"""
-    parser = argparse.ArgumentParser(description="AutoAlpha Harness")
-    parser.add_argument("--data-root", type=Path, default=Path("data"))
-    parser.add_argument("--output-root", type=Path, default=Path("artifacts"))
-    parser.add_argument("--start", default="2018-01-01")
-    parser.add_argument("--end", default="2020-12-31")
-    parser.add_argument("--max-symbols", type=int, default=0)
-    parser.add_argument("--engineering", action="store_true")
-    args = parser.parse_args()
-    run_id = datetime.now(timezone.utc).strftime("run-%Y%m%dT%H%M%SZ")
-    output = args.output_root
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--data-root", type=Path, default=Path("data"))
+    p.add_argument("--output-root", type=Path, default=Path("artifacts"))
+    p.add_argument("--run-id", default=None)
+    p.add_argument("--start", default="2016-07-01")
+    p.add_argument("--end", default="2022-06-30")
+    p.add_argument("--max-symbols", type=int, default=0)
+    p.add_argument("--max-structures", type=int, default=4)
+    p.add_argument("--workers", type=int, default=3)
+    p.add_argument("--provider", choices=["manual", "llm", "hybrid"], default="manual")
+    p.add_argument("--industry-policy", choices=["strict", "quarantine"], default="strict")
+    p.add_argument("--industry-source", choices=["exact_intervals", "rqdata_daily"], default="exact_intervals")
+    p.add_argument("--auction-policy", choices=["strict", "quarantine"], default=None)
+    p.add_argument("--data-profile", choices=["full", "daily"], default="full")
+    p.add_argument("--no-auto-evolve", action="store_true")
+    p.add_argument("--engineering", action="store_true")
+    p.add_argument("--discovery", action="store_true")
+    p.add_argument("--bayes", action="store_true")
+    args = p.parse_args()
+    config = ResearchConfig(start=args.start, end=args.end, max_symbols=args.max_symbols,
+                            max_structures=args.max_structures, workers=args.workers,
+                            provider=args.provider, industry_policy=args.industry_policy,
+                            industry_source=args.industry_source, auction_policy=args.auction_policy,
+                            data_profile=args.data_profile, auto_evolve=not args.no_auto_evolve,
+                            mode="engineering" if args.engineering else "formal",
+                            n_boot=100 if args.engineering else 1000,
+                            n_placebo=99 if args.engineering else 500,
+                            n_trees=30 if args.engineering else 500,
+                            n_splits=2 if args.engineering else 20)
+    run_id = args.run_id or datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     try:
-        config = ResearchConfig(start=args.start, end=args.end, max_symbols=args.max_symbols,
-                                mode="engineering" if args.engineering else "formal",
-                                n_boot=100 if args.engineering else 1000,
-                                n_placebo=99 if args.engineering else 500,
-                                n_trees=30 if args.engineering else 500,
-                                n_splits=2 if args.engineering else 20, max_structures=4)
-        panel = build_panel(args.data_root, config)
-        overview = {"run_id": run_id, "status": "MEASURED", "config": config.model_dump(),
-                    "report": panel.report, "dates": len(panel.dates),
-                    "symbols": len(panel.fields["close"].columns), "map": build_map()}
-        structure_rows, library = [], []
-        first = seed_structure(0, run_id)
-        # 注册表达式前冻结切点；合法性检查不触碰未来标签。
-        cuts = freeze_cuts(panel.fields, ["ret_5d", "turnover_today", "market_cap", "avg_trade_size"], config.seed)
-        for expression in first.operational:
-            register_cell(expression, panel.fields, cuts)
-        bets = {assertion.id: {"probability": assertion.prior_p, "created_at": datetime.now(timezone.utc).isoformat()}
-                for assertion in first.assertions}
-        store = AuditStore(output)
-        frozen_hash = store.freeze(run_id, first.model_dump(), bets)
-        measured, stored = measure_panel(first, panel, config, cuts)
-        blades = run_blades(first, panel, measured, stored, library, config)
-        structure_rows.append({"id": first.id, "name": first.name, "family": first.family, "form": first.form,
-                               "hash": frozen_hash, "measurement": measured, "blades": blades,
-                               "verdict": blades["verdict"], "formal": False})
-        overview["status"] = "RESEARCH_ONLY"
-        overview["power"] = power_budget(next((row["n_eff"] for row in measured["curves"]
-                                                if row["expression"] == 1 and row["horizon"] == 5), 1), 0.65, 0.05)
-        overview["audit"] = store.verify()
-        write_json(output / "overview.json", overview)
-        write_json(output / "structures.json", structure_rows)
-        return 0
-    except Exception as exc:  # 保留错误证据，禁止静默降级。
-        output.mkdir(parents=True, exist_ok=True)
-        write_json(output / "failure.json", {"run_id": run_id, "error": str(exc),
-                                              "type": type(exc).__name__, "traceback": traceback.format_exc()})
-        print(f"研究批次阻断: {type(exc).__name__}: {exc}")
+        run_research(config, run_id, args.data_root, args.output_root, args.discovery, args.bayes)
+    except Exception as exc:  # noqa: BLE001 - CLI boundary reports a failed research run
+        print(f"Research run blocked: {type(exc).__name__}: {exc}")
         return 2
+    return 0
 
 
 if __name__ == "__main__":

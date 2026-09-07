@@ -7,29 +7,45 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy.stats import t as student_t
 
 from engine.config import HORIZONS, ResearchConfig
 from engine.data import MarketPanel
 from engine.dsl import evaluate
 
 
+def _finite(value):
+    return float(value) if np.isfinite(value) else None
+
+
 def daily_ic(factor: pd.DataFrame, returns: pd.DataFrame, minimum: int = 30, rank: bool = False) -> pd.Series:
-    """计算每日 Pearson 或秩相关；输入对齐矩阵，返回日序列，并列秩使用平均排名。"""
+    """Bounded-row Pearson/rank correlation with paired missingness and average ties."""
     if not factor.index.equals(returns.index) or not factor.columns.equals(returns.columns):
         raise ValueError("因子与收益索引不一致")
-    valid = factor.notna() & returns.notna()
-    x, y = factor.where(valid), returns.where(valid)
-    if rank:
-        x, y = x.rank(axis=1), y.rank(axis=1)
-    x, y = x.sub(x.mean(axis=1), axis=0), y.sub(y.mean(axis=1), axis=0)
-    denominator = (x.pow(2).sum(axis=1) * y.pow(2).sum(axis=1)).pow(0.5)
-    return ((x * y).sum(axis=1) / denominator.replace(0, np.nan)).where(valid.sum(axis=1) >= minimum)
+    a,b=factor.to_numpy(dtype=float),returns.to_numpy(dtype=float)
+    result=np.full(len(a),np.nan)
+    for start in range(0,len(a),128):
+        x,y=a[start:start+128],b[start:start+128]
+        valid=~np.isnan(x)&~np.isnan(y)
+        count=valid.sum(axis=1)
+        if rank:
+            x=pd.DataFrame(np.where(valid,x,np.nan)).rank(axis=1).to_numpy()
+            y=pd.DataFrame(np.where(valid,y,np.nan)).rank(axis=1).to_numpy()
+        with np.errstate(invalid="ignore",divide="ignore"):
+            mx=np.where(valid,x,0).sum(axis=1)/count
+            my=np.where(valid,y,0).sum(axis=1)/count
+            dx=np.where(valid,x-mx[:,None],0)
+            dy=np.where(valid,y-my[:,None],0)
+            denom=np.sqrt(np.einsum("ij,ij->i",dx,dx)*np.einsum("ij,ij->i",dy,dy))
+            result[start:start+len(x)]=np.divide(np.einsum("ij,ij->i",dx,dy),denom,
+                 out=np.full(len(x),np.nan),where=(count>=minimum)&(denom>0))
+    return pd.Series(result,index=factor.index)
 
 
 def block_means(values: np.ndarray, horizon: int, n_boot: int, seed: int) -> np.ndarray:
     """重抽连续日期块的均值；输入含缺失的日序列，返回 bootstrap 均值，不压缩日期。"""
     x = np.asarray(values, dtype=float)
-    block = max(10, 2 * horizon)
+    block = max(20, 4 * horizon)
     if x.ndim != 1 or len(x) < 2 * block or np.isfinite(x).sum() < block:
         raise ValueError("不足两个时间块，无法估计不确定性")
     rng = np.random.default_rng(seed)
@@ -49,7 +65,7 @@ def summarize(series: pd.Series, horizon: int, config: ResearchConfig) -> dict[s
             "p": 1.0, "p_negative": 1.0, "ci_low": None, "ci_high": None,
             "days": len(valid), "positive_fraction": None, "std": None,
             "q05": None, "q95": None, "skew": None}
-    if len(valid) < max(20, 2 * max(10, 2 * horizon)):
+    if len(valid) < max(40, 2 * max(20, 4 * horizon)):
         return base
     samples = block_means(series.to_numpy(), horizon, config.n_boot, config.seed)
     se = float(np.std(samples, ddof=1))
@@ -66,9 +82,20 @@ def summarize(series: pd.Series, horizon: int, config: ResearchConfig) -> dict[s
     error = samples - samples.mean()
     p = float((1 + np.count_nonzero(error >= mean)) / (config.n_boot + 1))
     p_negative = float((1 + np.count_nonzero(error <= mean)) / (config.n_boot + 1))
-    # 百分位区间与检验均保留自相关块结构；HAC t 作为独立的诊断列。
+    # Finite-block safeguard: percentile tails alone were anti-conservative in
+    # correlated-batch null simulations. Use the larger bootstrap/HAC standard
+    # error and Student-t critical values with the number of blocks, not rows.
+    blocks = max(2, int(finite_count // max(20, 4 * horizon)))
+    inference_se = max(se, hac_se) * np.sqrt(blocks / (blocks - 1))
+    statistic = mean / inference_se
+    p = max(p, float(student_t.sf(statistic, df=blocks - 1)))
+    p_negative = max(p_negative, float(student_t.cdf(statistic, df=blocks - 1)))
     ci_low, ci_high = np.quantile(samples, [0.025, 0.975])
-    return {**base, "mean": mean, "se": se, "n_eff": 1 / se ** 2, "mde": 2.8016 * se,
+    radius = student_t.ppf(.975, df=blocks - 1) * inference_se
+    ci_low, ci_high = min(ci_low, mean - radius), max(ci_high, mean + radius)
+    return {**base, "mean": mean, "se": inference_se, "bootstrap_se": se,
+            "inference_blocks": blocks, "method": "moving-block with finite-block Student-t safeguard",
+            "n_eff": 1 / inference_se ** 2, "mde": 2.8016 * inference_se,
             "t": mean / hac_se if hac_se > 0 else None, "hac_se": hac_se, "hac_lag": lag,
             "p": p, "p_negative": p_negative, "ci_low": float(ci_low), "ci_high": float(ci_high),
             "positive_fraction": float((valid > 0).mean()), "std": float(valid.std()),
@@ -140,9 +167,9 @@ def measure_panel(
             summary = summarize(ic, horizon, config)
             curves.append({"expression": expression_index + 1, "horizon": horizon, **summary,
                            "raw_ic": float(raw_ic.mean()) if raw_ic.notna().any() else None,
-                           "rank_ic": float(daily_ic(signal, residual, config.min_cross_section, True).mean()),
-                           "tb": float((groups.Q5 - groups.Q1).mean()),
-                           "groups": [float(groups[column].mean()) for column in groups]})
+                           "rank_ic": _finite(daily_ic(signal, residual, config.min_cross_section, True).mean()),
+                           "tb": _finite((groups.Q5 - groups.Q1).mean()),
+                           "groups": [_finite(groups[column].mean()) for column in groups]})
             stored[f"ic_e{expression_index + 1}_h{horizon}"] = ic.to_frame("ic")
             if expression_index == 0:
                 stored[f"groups_h{horizon}"] = groups
@@ -153,6 +180,11 @@ def measure_panel(
     stored["contribution"] = contribution
     for i, signal in enumerate(signals):
         stored[f"signal_{i}"] = signal
+    if structure.lineage.get("ungated_operational"):
+        parent_coverage = evaluate(structure.lineage["ungated_coverage"], panel.fields, cuts).fillna(False).astype(bool)
+        stored["ungated_signal"] = evaluate(structure.lineage["ungated_operational"][0],
+                                             panel.fields, cuts).where(parent_coverage)
+        stored["condition_cut"] = pd.DataFrame({"value": [cuts[structure.lineage["cut_id"]]["value"]]})
     primary_ic = stored[f"ic_e1_h{structure.primary_horizon}"].ic
     monthly = []
     quarterly = []
@@ -162,10 +194,14 @@ def measure_panel(
                             "low": float(sequence.quantile(0.05)), "high": float(sequence.quantile(0.95))})
     for period, sequence in primary_ic.groupby(primary_ic.index.to_period("Q")):
         quarterly.append({"period": str(period), **summarize(sequence, structure.primary_horizon, config)})
-    absolute = contribution.abs().stack().sort_values(ascending=False)
+    absolute = np.abs(contribution.to_numpy()).ravel()
+    absolute = absolute[np.isfinite(absolute)]
     total = absolute.sum()
-    concentration = {str(k): float(absolute.iloc[:max(1, int(len(absolute) * k / 100))].sum() / total)
-                     if total > 0 else None for k in (5, 10, 20)}
+    concentration = {}
+    for k in (5, 10, 20):
+        count = max(1, int(len(absolute) * k / 100))
+        concentration[str(k)] = (float(np.partition(absolute, len(absolute) - count)[-count:].sum() / total)
+                                 if total > 0 else None)
     hit_valid = primary.notna() & returns.notna()
     hits = primary.gt(primary.median(axis=1), axis=0).eq(returns.gt(0)) & hit_valid
     return {"curves": curves, "monthly": monthly, "quarterly": quarterly,
@@ -173,7 +209,10 @@ def measure_panel(
             "coverage": float((coverage & primary.notna()).sum().sum() / max(1, panel.fields["in_pool"].sum().sum())),
             "observations": int(hit_valid.sum().sum()), "dates": len(panel.dates),
             "hit_rate": float(hits.sum().sum() / max(1, hit_valid.sum().sum())),
-            "car": car_event(panel.fields["failed_limit_up"], panel.fields["ret_1d"]),
+            "car": car_event(evaluate(structure.lineage["event_expression"], panel.fields, cuts).fillna(False).astype(bool)
+                             if structure.lineage.get("event_expression") else panel.fields["failed_limit_up"],
+                             panel.fields["ret_1d"]),
+            "car_event": structure.lineage.get("event_expression", "failed_limit_up (diagnostic only)"),
             "contribution_sum": float(contribution.sum().sum()),
             "influence_valid_days": int(psi.notna().any(axis=1).sum())}, stored
 

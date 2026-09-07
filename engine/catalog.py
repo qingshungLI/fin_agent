@@ -48,6 +48,20 @@ class Assertion(BaseModel):
     weight: float = Field(default=0.2, gt=0, le=1)
     prior_p: float = Field(default=0.6, ge=0.2, le=0.8)
 
+    @model_validator(mode="after")
+    def validate_assertion(self):
+        relations = {"shape": {"monotone_up", "monotone_down"}, "peak": {"inside"},
+                     "sign": {"positive", "negative"}, "side": {"difference"}}
+        if self.relation not in relations[self.kind]:
+            raise ValueError("Assertion kind and relation disagree")
+        if len(self.horizons) != 1 or self.horizons[0] not in (1,3,5,10):
+            raise ValueError("Each assertion freezes exactly one registered horizon")
+        if len(self.peak_range) != 2 or not 1 <= self.peak_range[0] <= self.peak_range[1] <= 10:
+            raise ValueError("Invalid frozen peak interval")
+        if self.kind == "sign" and self.direction != (1 if self.relation == "positive" else -1):
+            raise ValueError("Sign relation and direction disagree")
+        return self
+
 
 class Structure(BaseModel):
     """登记机制及三个算子化；输入标签和断言，要求旁证可观察且表达式不重复。"""
@@ -75,6 +89,8 @@ class Structure(BaseModel):
                 raise ValueError(f"未登记词表: {slot}={value}")
         if self.form in INFEASIBLE.get(self.family, []):
             raise ValueError("该机制/表现形式已被登记为不可行")
+        if self.labels["form"] != FORM_CODES[self.form - 1]:
+            raise ValueError("Representation label disagrees with map coordinate")
         if len(set(self.operational)) != 3:
             raise ValueError("三个表达式必须不同")
         if len({a.id for a in self.assertions}) != len(self.assertions):
@@ -125,7 +141,13 @@ def seed_structure(index: int, run_id: str) -> Structure:
         mechanism = "异常换手吸引有限注意力并形成短期价格压力；关注消退后价格回归。注意力机制预测小市值、低平均单笔成交额的股票中反转更强。"
         sides = [("market_cap_pct", -1), ("avg_trade_size_pct", -1)]
     if form == 1:
-        expressions = [expressions[1], expressions[2], expressions[0]]
+        if family == "M2":
+            expressions = ["neg(xs_z(ret_5d))", "neg(xs_rank(ret_3d))",
+                           "neg(sub(ret_1d, industry_mean(ret_1d)))"]
+        else:
+            expressions = ["neg(xs_rank(turnover_today))",
+                           "neg(xs_z(log(turnover_today)))",
+                           "neg(xs_rank(avg_trade_size))"]
     assertions = [
         Assertion(id="P1", kind="shape", subject="dose_shape", relation="monotone_up",
                   attribution="交易信号已取反，信号升高对应更强的未来反转补偿"),
@@ -149,6 +171,9 @@ def register_cell(
 ) -> dict[str, Any]:
     """执行尺度、边界、截断不变性与混淆检查；返回注册报告，未通过时拒绝。"""
     compiled = compile_expression(expression, set(fields), cuts)
+    # Only referenced inputs plus implicit rank/industry context need scale copies.
+    selected = set(compiled.dependencies) | set(confounders or []) | ({"in_pool", "industry"} & set(fields))
+    fields = {k: v for k, v in fields.items() if k in selected}
     value = evaluate(expression, fields, cuts)
     if not value.notna().any().any():
         raise ValueError(f"表达式没有有效观测: {expression}")
@@ -198,3 +223,17 @@ def freeze_cuts(fields: dict[str, pd.DataFrame], names: list[str], seed: int) ->
                                                 "lower": float(lower[j]), "upper": float(upper[j])}
             previous_upper = upper[j]
     return result
+
+
+def check_convergent_orientation(structure, fields, cuts):
+    """Reject strongly contradictory operationalizations without reading labels."""
+    from engine.metrics import daily_ic
+    values = [evaluate(expr, fields, cuts) for expr in structure.operational]
+    correlations = []
+    for i in range(3):
+        for j in range(i + 1, 3):
+            correlation = daily_ic(values[i], values[j]).mean()
+            if np.isfinite(correlation) and correlation < -0.2:
+                raise ValueError("Operationalizations have contradictory orientations; no returns were read")
+            correlations.append(float(correlation) if np.isfinite(correlation) else None)
+    return {"pairwise_feature_correlations": correlations, "uses_returns": False}

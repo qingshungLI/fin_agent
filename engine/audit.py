@@ -4,13 +4,13 @@ B/H 使用全项目一次性消费凭证；失败也保留读取事实。文件�
 本地哈希链检测修改，不能替代外部时间戳服务或抵御同权限整库重写。
 """
 
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
 import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterator
 
 
@@ -100,7 +100,7 @@ class AuditStore:
             db.execute("INSERT INTO structures VALUES(?,?,?,?,?)",
                        (structure["id"], run_id, canonical(content), hashed, now()))
             self._append(db, "structure_frozen", {"run_id": run_id, "id": structure["id"], "hash": hashed})
-        write_json(self.root / run_id / structure["id"] / "frozen.json", content)
+            write_json(self.root / run_id / structure["id"] / "frozen.json", content)
         return hashed
 
     def consume(self, segment: str, run_id: str, ids: list[str]) -> str:
@@ -135,6 +135,8 @@ class AuditStore:
                 raise ValueError(f"审计链被修改，事件 {row['seq']}")
             previous = row["hash"]
         for row in structures:
+            if digest(json.loads(row["content"])) != row["hash"]:
+                raise ValueError(f"数据库冻结档案被修改: {row['id']}")
             path = self.root / row["run_id"] / row["id"] / "frozen.json"
             if not path.exists() or digest(json.loads(path.read_text(encoding="utf-8"))) != row["hash"]:
                 raise ValueError(f"冻结档案被修改或丢失: {row['id']}")

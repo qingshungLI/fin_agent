@@ -4,10 +4,10 @@
 行业以精确三级有效区间连接，缺失不填成其他行业；原始文件始终只读。
 """
 
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-import hashlib
 
 import numpy as np
 import pandas as pd
@@ -83,32 +83,73 @@ def require_unique(frame: pd.DataFrame, keys: list[str], source: str) -> None:
 
 def attach_industry_pit(
     dates: pd.DatetimeIndex, symbols: list[str], changes: pd.DataFrame,
+    policy: str = "strict",
 ) -> pd.DataFrame:
-    """按 start<=date<cancel 匹配三级行业；返回矩阵，区间重叠直接失败。"""
-    changes = changes.drop_duplicates().sort_values(["order_book_id", "start_date", "cancel_date", "industry_code"])
+    """Join half-open intervals; conflicting codes remain unknown, never guessed.
+
+    Quarantine is an explicit research-cohort policy. Identical overlapping codes
+    can be merged without ambiguity. Invalid intervals always fail.
+    """
+    if policy not in {"strict", "quarantine"}:
+        raise ValueError("Unknown industry policy")
     result = pd.DataFrame(None, index=dates, columns=symbols, dtype=object)
-    for symbol, rows in changes.groupby("order_book_id", sort=False):
+    for symbol, rows in changes.drop_duplicates().groupby("order_book_id", sort=False):
         if symbol not in result:
             continue
-        starts = pd.to_datetime(rows.start_date).to_numpy()
-        ends = pd.to_datetime(rows.cancel_date).to_numpy()
-        if np.any(starts >= ends) or np.any(starts[1:] < ends[:-1]):
+        active = np.zeros(len(dates), dtype=np.int32)
+        assigned = np.empty(len(dates), dtype=object)
+        assigned[:] = None
+        for code, intervals in rows.groupby("industry_code"):
+            present = np.zeros(len(dates), dtype=bool)
+            for row in intervals.itertuples():
+                if pd.isna(row.start_date) or pd.isna(row.cancel_date) or row.start_date >= row.cancel_date:
+                    raise ValueError(f"行业有效区间反向或缺失: {symbol}")
+                present |= (dates >= row.start_date) & (dates < row.cancel_date)
+            assigned[present] = code
+            active += present
+        if (active > 1).any() and policy == "strict":
             raise ValueError(f"行业有效区间重叠或反向: {symbol}")
-        positions = np.searchsorted(starts, dates.to_numpy(), side="right") - 1
-        valid = (positions >= 0) & (dates.to_numpy() < ends[np.maximum(positions, 0)])
-        values = rows.industry_code.to_numpy()
-        result.loc[valid, symbol] = values[positions[valid]]
+        assigned[active != 1] = None
+        result[symbol] = assigned
     return result
 
 
+
+def attach_daily_industry(dates, symbols, daily):
+    """Join vendor day-level responses exactly; never infer between observations."""
+    required = {"order_book_id", "date", "third_industry_code", "source",
+                "client_version", "retrieved_at"}
+    if not required <= set(daily.columns):
+        raise ValueError("逐日行业缺少来源或日期字段")
+    require_unique(daily, ["order_book_id", "date"], "RQData逐日行业")
+    if (daily.empty or not daily.source.eq("sws").all()
+            or not daily.client_version.eq("3.5.6.1").all()
+            or daily.third_industry_code.isna().any()
+            or pd.to_datetime(daily.retrieved_at, utc=True, errors="coerce").isna().any()):
+        raise ValueError("逐日行业来源、版本或代码无效")
+    return daily.pivot(index="date", columns="order_book_id",
+                       values="third_industry_code").reindex(index=dates, columns=symbols)
+
+
 def industry_mean(values: pd.DataFrame, industry: pd.DataFrame) -> pd.DataFrame:
-    """计算同日同行业均值；输入对齐矩阵，返回同形矩阵，未知行业保持 NaN。"""
+    """Mean per date and known industry with missing values excluded.
+
+    Integer group codes and bincount avoid constructing thousands of DataFrames.
+    No cross-day pooling, zero filling, or mixing of unknown industries.
+    """
+    if not values.index.equals(industry.index) or not values.columns.equals(industry.columns):
+        raise ValueError("Industry and value indexes differ")
     array = values.to_numpy(dtype=float)
     codes = industry.to_numpy()
     output = np.full(array.shape, np.nan)
     for day in range(len(array)):
-        frame = pd.DataFrame({"value": array[day], "industry": codes[day]})
-        output[day] = frame.groupby("industry")["value"].transform("mean").to_numpy()
+        groups, labels = pd.factorize(codes[day], sort=False)
+        valid = (groups >= 0) & np.isfinite(array[day])
+        sums = np.bincount(groups[valid], weights=array[day, valid], minlength=len(labels))
+        counts = np.bincount(groups[valid], minlength=len(labels))
+        means = np.divide(sums, counts, out=np.full(len(labels), np.nan), where=counts > 0)
+        known = groups >= 0
+        output[day, known] = means[groups[known]]
     return pd.DataFrame(output, index=values.index, columns=values.columns)
 
 
@@ -202,15 +243,31 @@ def build_panel(
     fields["listed_ok"] = fields["days_since_listing"].ge(120)
     fields["in_pool"] = (fields["listed_ok"] & fields["not_delisted"] & fields["not_st"]
                          & fields["not_suspended"] & fields["close"].gt(0))
-    changes = read_source(root, "industry_sws_2021_exact_changes", warmup, end,
-                          symbols=symbols, date_column=None, manifest=manifest)
-    fields["industry"] = attach_industry_pit(dates, symbols, changes)
+    if config.industry_source == "rqdata_daily":
+        daily = read_source(root, "industry_sws_daily", warmup, end,
+                            symbols=symbols, manifest=manifest)
+        fields["industry"] = attach_daily_industry(dates, symbols, daily)
+        report.append({"name": "RQData逐交易日三级行业直接查询", "status": "pass",
+                       "count": len(daily), "source": "sws", "client_version": "3.5.6.1",
+                       "detail": "按历史有效日直接查询；未由月度快照前填/后填。属于当前供应商历史响应，不冒充历史发布时点存档。"})
+    else:
+        changes = read_source(root, "industry_sws_2021_exact_changes", warmup, end,
+                              symbols=symbols, date_column=None, manifest=manifest)
+        fields["industry"] = attach_industry_pit(dates, symbols, changes, config.industry_policy)
     unknown = fields["industry"].isna() & fields["in_pool"]
     unknown_fraction = float(unknown.sum().sum() / max(1, fields["in_pool"].sum().sum()))
-    if unknown_fraction > 0.01:
+    if config.industry_policy == "strict" and unknown_fraction > 0.01:
         raise ValueError(f"PIT 行业空档率 {unknown_fraction:.2%} > 1%")
     report.append({"name": "PIT 精确三级行业（非一级）", "status": "warning" if unknown_fraction else "pass",
                    "count": int(unknown.sum().sum())})
+    if config.industry_policy == "quarantine":
+        before = int(fields["in_pool"].sum().sum())
+        fields["in_pool"] &= fields["industry"].notna()
+        report.append({"name": "显式隔离未知或歧义行业观测", "status": "warning",
+                       "count": int(unknown.sum().sum()), "fraction": unknown_fraction,
+                       "eligible_before": before, "policy": "quarantine",
+                       "formal_eligible": False,
+                       "detail": "原始数据未修改；结果只适用于已知行业研究子集，不可授予正式 PASS"})
     adjustments = read_source(root, "adj_factor", "2016-07-01", end,
                               symbols=symbols, date_column="ex_date", manifest=manifest)
     require_unique(adjustments, ["order_book_id", "ex_date"], "adj_factor")
@@ -224,6 +281,7 @@ def build_panel(
     adjusted_close = fields["close"] * fields["adjustment"]
     fields["adj_close"] = adjusted_close
     fields["ret_1d"] = adjusted_close.pct_change(fill_method=None)
+    fields["ret_3d"] = adjusted_close.pct_change(3, fill_method=None)
     fields["ret_5d"] = adjusted_close.pct_change(5, fill_method=None)
     fields["ret_20d"] = adjusted_close.pct_change(20, fill_method=None)
     reference = fields["close"].div(fields["prev_close"]) - 1
@@ -250,26 +308,38 @@ def build_panel(
     fields["is_limit_up"] = fields["close"].ge(fields["limit_up"] - 0.005) & fields["limit_up"].gt(0)
     fields["is_limit_down"] = fields["close"].le(fields["limit_down"] + 0.005) & fields["limit_down"].gt(0)
     fields["failed_limit_up"] = fields["high"].ge(fields["limit_up"] - 0.005) & ~fields["is_limit_up"] & fields["limit_up"].gt(0)
-    auction = read_source(root, "open_auction", warmup, end, symbols=symbols,
-                          date_column="datetime", manifest=manifest)
-    auction["date"] = pd.to_datetime(auction.datetime).dt.normalize()
-    require_unique(auction, ["order_book_id", "date"], "open_auction")
-    seconds = (pd.to_datetime(auction.datetime) - auction.date).dt.total_seconds()
-    if ((seconds < 9 * 3600 + 24 * 60) | (seconds > 9 * 3600 + 26 * 60)).any():
-        raise ValueError("竞价快照不在约定 09:24-09:26 窗口")
-    buy = auction[[f"b{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
-    sell = auction[[f"a{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
-    auction["auction_imbalance"] = (buy - sell) / (buy + sell).replace(0, np.nan)
-    valid_quote = auction.a1.gt(0) & auction.b1.gt(0) & auction.a1.ge(auction.b1)
-    auction["auction_spread"] = ((auction.a1 - auction.b1) / ((auction.a1 + auction.b1) / 2)).where(valid_quote)
-    auction["auction_amount"] = auction.total_turnover
-    for name in ["auction_imbalance", "auction_spread", "auction_amount"]:
-        fields[name] = auction.pivot(index="date", columns="order_book_id", values=name).reindex(index=dates, columns=symbols)
-    fields["auction_turnover_share"] = fields["auction_amount"] / fields["total_turnover"].rolling(20, min_periods=20).mean().shift(1)
-    report.append({"name": "竞价盘口有效性", "status": "warning" if not valid_quote.all() else "pass",
-                   "count": int((~valid_quote).sum()), "detail": "零价或交叉盘口不作为可用价差"})
+    if config.data_profile == "full":
+        auction = read_source(root, "open_auction", warmup, end, symbols=symbols,
+                              date_column="datetime", manifest=manifest)
+        auction["date"] = pd.to_datetime(auction.datetime).dt.normalize()
+        require_unique(auction, ["order_book_id", "date"], "open_auction")
+        seconds = (pd.to_datetime(auction.datetime) - auction.date).dt.total_seconds()
+        outside = (seconds < 9 * 3600 + 24 * 60) | (seconds > 9 * 3600 + 26 * 60)
+        if outside.any():
+            if (config.auction_policy or config.industry_policy) == "strict":
+                raise ValueError("竞价快照不在约定 09:24-09:26 窗口")
+            report.append({"name": "隔离超时竞价快照", "status": "warning",
+                           "count": int(outside.sum()), "formal_eligible": False,
+                           "detail": "未将其他时点盘口冒充竞价；所有对应竞价字段保留缺失"})
+            auction.loc[outside, [c for c in auction.columns if c not in
+                                 {"order_book_id", "datetime", "date"}]] = np.nan
+        buy = auction[[f"b{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
+        sell = auction[[f"a{i}_v" for i in range(1, 6)]].sum(axis=1, min_count=5)
+        auction["auction_imbalance"] = (buy - sell) / (buy + sell).replace(0, np.nan)
+        valid_quote = auction.a1.gt(0) & auction.b1.gt(0) & auction.a1.ge(auction.b1)
+        auction["auction_spread"] = ((auction.a1 - auction.b1) / ((auction.a1 + auction.b1) / 2)).where(valid_quote)
+        auction["auction_amount"] = auction.total_turnover
+        for name in ["auction_imbalance", "auction_spread", "auction_amount"]:
+            fields[name] = auction.pivot(index="date", columns="order_book_id", values=name).reindex(index=dates, columns=symbols)
+        fields["auction_turnover_share"] = fields["auction_amount"] / fields["total_turnover"].rolling(20, min_periods=20).mean().shift(1)
+        report.append({"name": "竞价盘口有效性", "status": "warning" if not valid_quote.all() else "pass",
+                       "count": int((~valid_quote).sum()), "detail": "零价或交叉盘口不作为可用价差"})
+    else:
+        report.append({"name": "事前登记日线量价数据配置", "status": "pass", "count": 0,
+                       "detail": "不读取或登记任何竞价字段，不能据此研究竞价机制"})
     for name in ["market_cap", "amihud", "realized_vol", "auction_spread", "turnover_today", "avg_trade_size"]:
-        fields[name + "_pct"] = fields[name].where(fields["in_pool"]).rank(axis=1, pct=True) * 100
+        if name in fields:
+            fields[name + "_pct"] = fields[name].where(fields["in_pool"]).rank(axis=1, pct=True) * 100
     labels = build_labels(fields)
     for name, values in list(labels.items()):
         if name.startswith("raw_"):

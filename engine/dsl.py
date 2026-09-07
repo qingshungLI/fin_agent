@@ -105,6 +105,30 @@ def compile_expression(
     return CompiledExpression(expression, tree, scale, tuple(sorted(dependencies)))
 
 
+
+def stable_rolling_z(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    """Recompute each window after local scaling to avoid rolling-variance drift.
+
+    Only the current historical window is read. Bounded column chunks keep the
+    temporary arrays small even for a full equity universe.
+    """
+    values = frame.to_numpy(dtype=float)
+    out = np.full(values.shape, np.nan)
+    if len(values) < window:
+        return pd.DataFrame(out, index=frame.index, columns=frame.columns)
+    for start in range(0, values.shape[1], 64):
+        block = values[:, start:start+64]
+        windows = np.lib.stride_tricks.sliding_window_view(block, window, axis=0)
+        scale = np.max(np.abs(windows), axis=-1, keepdims=True)
+        normalized = np.divide(windows, scale, out=np.full(windows.shape, np.nan),
+                               where=scale>0)
+        mean = normalized.mean(axis=-1)
+        std = normalized.std(axis=-1, ddof=1)
+        result = np.divide(normalized[:, :, -1]-mean, std,
+                           out=np.full(mean.shape,np.nan), where=std>64*np.finfo(float).eps)
+        out[window-1:, start:start+64] = result
+    return pd.DataFrame(out,index=frame.index,columns=frame.columns)
+
 def evaluate(
     expression: str, fields: dict[str, pd.DataFrame],
     cuts: dict[str, dict[str, Any]] | None = None,
@@ -148,7 +172,7 @@ def evaluate(
         if name.startswith("ts_"):
             window = x.rolling(args[1], min_periods=args[1])
             if name == "ts_z":
-                return (x - window.mean()) / window.std().replace(0, np.nan)
+                return stable_rolling_z(x, args[1])
             if name == "ts_rank":
                 return window.rank(pct=True)
             return getattr(window, name[3:])()
