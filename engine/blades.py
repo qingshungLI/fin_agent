@@ -3,8 +3,6 @@
 每把刀保留独立状态与后续动作。重复采样加一修正避免零 p；阶段 A 不产生正式 PASS。
 """
 
-from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import get_context
 from typing import Any
 
 import numpy as np
@@ -42,87 +40,10 @@ def iaaft(values: np.ndarray, rng: np.random.Generator, iterations: int = 30) ->
     return surrogate, float(error)
 
 
-def _placebo_task(task: tuple[str, np.ndarray, np.ndarray, int, int, int]) -> dict[str, Any]:
-    """计算单类安慰剂；输入明确数组、次数和种子，返回零分布，工作进程不读文件。"""
-    kind, x, y, horizon, repeats, seed = task
-    rng = np.random.default_rng(seed)
-    null, observed, errors = [], [], []
-    baseline = _array_ic(x, y)
-    for _ in range(repeats):
-        if kind == "within_day":
-            surrogate = np.take_along_axis(x, np.argsort(rng.random(x.shape), axis=1), axis=1)
-            null.append(_array_ic(surrogate, y))
-            observed.append(baseline)
-        elif kind == "time_shift":
-            k = int(rng.integers(horizon + 1, max(horizon + 2, len(x) // 3)))
-            if rng.random() < 0.5:
-                null.append(_array_ic(x[:-k], y[k:]))
-                observed.append(_array_ic(x[k:], y[k:]))
-            else:
-                null.append(_array_ic(x[k:], y[:-k]))
-                observed.append(_array_ic(x[:-k], y[:-k]))
-        else:
-            surrogate, error = iaaft(x, rng)
-            null.append(_array_ic(surrogate, y))
-            observed.append(baseline)
-            errors.append(error)
-    exceed = np.asarray(null) >= np.asarray(observed)
-    p_value = float((1 + exceed.sum()) / (repeats + 1))
-    return {"kind": kind, "p": p_value, "quantile": 1 - p_value, "exceed": int(exceed.sum()),
-            "spectral_max": float(max(errors)) if errors else None,
-            "null": null, "observed": float(np.mean(observed)),
-            "spectral_error": float(np.mean(errors)) if errors else None,
-            "state": "pass" if p_value < 0.01 and (not errors or max(errors) < 0.1) else "fail"}
-
-
-def blade_placebo(signal: pd.DataFrame, returns: pd.DataFrame, config: ResearchConfig, horizon: int = 5) -> dict[str, Any]:
-    """运行三种 A 段安慰剂；返回分项结果，完整子面板不足时不强行插值。"""
-    if config.n_placebo < 100:
-        return {"state": "untested", "reason": "99次置换最小p=0.01，无法检验p<0.01；快速运行不作安慰剂结论",
-                "tests": [], "stocks": 0, "dates": 0}
-    # 固定使用探索后半段，避免按结果挑样本；三类检验共用完全相同的连续子面板。
-    x = signal.iloc[len(signal) // 2:].iloc[:-11]
-    y = returns.reindex_like(x)
-    complete = x.notna().all(axis=0) & y.notna().all(axis=0)
-    x, y = x.loc[:, complete], y.loc[:, complete]
-    import hashlib
-    # Frozen computational cohort; independent of any effect/readout.
-    columns = sorted(x.columns, key=lambda c: hashlib.sha256(str(c).encode()).hexdigest())[:128]
-    x, y = x[columns], y[columns]
-    if len(x) < 60 or x.shape[1] < config.min_cross_section:
-        return {"state": "untested", "reason": "安慰剂完整连续子面板不足", "tests": [],
-                "stocks": x.shape[1], "dates": len(x)}
-    tasks = []
-    chunks = [min(25, config.n_placebo - i) for i in range(0, config.n_placebo, 25)]
-    for kind_index, kind in enumerate(("within_day", "time_shift", "iaaft")):
-        for chunk_index, repeats in enumerate(chunks):
-            tasks.append((kind, x.to_numpy(), y.to_numpy(), horizon, repeats,
-                          config.seed + 10000 * kind_index + chunk_index))
-    if config.workers == 1:
-        pieces = [_placebo_task(task) for task in tasks]
-    else:
-        with ProcessPoolExecutor(max_workers=config.workers, mp_context=get_context("spawn")) as pool:
-            futures = [pool.submit(_placebo_task, task) for task in tasks]
-            try:
-                pieces = [future.result() for future in futures]
-            except BaseException:
-                for future in futures:
-                    future.cancel()
-                raise
-    results = []
-    for kind in ("within_day", "time_shift", "iaaft"):
-        selected = [item for item in pieces if item["kind"] == kind]
-        exceed = sum(item["exceed"] for item in selected)
-        p_value = (1 + exceed) / (config.n_placebo + 1)
-        errors = [item["spectral_max"] for item in selected if item["spectral_max"] is not None]
-        results.append({"kind": kind, "p": p_value, "quantile": 1-p_value,
-                        "null": [value for item in selected for value in item["null"]],
-                        "observed": sum(item["observed"] * len(item["null"]) for item in selected) / config.n_placebo,
-                        "spectral_error": max(errors) if errors else None,
-                        "state": "pass" if p_value < .01 and (not errors or max(errors) < .1) else "fail"})
-    return {"state": "pass" if all(row["state"] == "pass" for row in results) else "fail",
-            "tests": results, "stocks": x.shape[1], "dates": len(x),
-            "selection": "探索后半段完整证券，代码哈希固定取最多128只；不作为总体检验的替代"}
+def blade_placebo(signal, returns, config, horizon=5, eligibility=None):
+    """Full daily eligible universe; no fixed or complete-security sample."""
+    from engine.placebo import full_market_placebo
+    return full_market_placebo(signal, returns, config, horizon, eligibility)
 
 
 def _assertion_state(summary: dict[str, Any], tolerance: float = 0) -> str:
@@ -253,7 +174,7 @@ def run_blades(
         return {**base, "reason": "有效样本不足以在 80% 功效下检出事前最小效应", "gate": "closed"}
     placebo = blade_placebo(stored["signal_0"],
                              panel.labels[f"industry_resid_{structure.primary_horizon}"],
-                             config, structure.primary_horizon)
+                             config, structure.primary_horizon, eligibility=panel.fields["in_pool"] & panel.fields["not_st"])
     if placebo["state"] != "pass":
         return {**base, "placebo": placebo, "gate": "open", "reason": "安慰剂未通过；停止机制解读，回查度量与时序伪影"}
     assertions = blade_assertion(structure, panel, stored, config)
