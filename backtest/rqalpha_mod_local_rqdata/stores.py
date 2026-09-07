@@ -47,6 +47,10 @@ SPLIT_DTYPE = np.dtype(
 )
 
 
+def nullable_float(value):
+    return np.nan if value is None else float(value)
+
+
 def date_key(value) -> int:
     if isinstance(value, (int, np.integer)):
         value = int(value)
@@ -68,6 +72,7 @@ class WarehouseStore:
         if not self.path.is_file():
             raise RuntimeError(f"local RQData warehouse does not exist: {self.path}")
         self.connection = duckdb.connect(str(self.path), read_only=True)
+        self.connection.execute("SET threads=4")
         self._bars: dict[str, np.ndarray] = {}
         self._status: dict[tuple[str, str], dict[int, bool]] = {}
         self._factors: dict[str, np.ndarray | None] = {}
@@ -151,6 +156,8 @@ class WarehouseStore:
             f'SELECT date, "{field}" FROM "{view}" WHERE order_book_id = ? ORDER BY date',
             [order_book_id],
         ).fetchall()
+        if any(row[1] is None for row in rows) or len({date_key(row[0]) for row in rows}) != len(rows):
+            raise ValueError(f"Invalid or duplicate historical status for {order_book_id}: {view}")
         result = {date_key(row[0]): bool(row[1]) for row in rows}
         self._status[cache_key] = result
         return result
@@ -248,13 +255,13 @@ class WarehouseStore:
         for dt, open_, last, limit_up, limit_down, volume, turnover, prev_close in rows:
             result[date_key(dt)] = {
                 "datetime": date_time_int(dt),
-                "open": float(open_),
-                "last": float(last),
-                "limit_up": float(limit_up),
-                "limit_down": float(limit_down),
-                "volume": float(volume),
-                "total_turnover": float(turnover),
-                "prev_close": float(prev_close),
+                "open": nullable_float(open_),
+                "last": nullable_float(last),
+                "limit_up": nullable_float(limit_up),
+                "limit_down": nullable_float(limit_down),
+                "volume": nullable_float(volume),
+                "total_turnover": nullable_float(turnover),
+                "prev_close": nullable_float(prev_close),
             }
         self._auctions[order_book_id] = result
         return result

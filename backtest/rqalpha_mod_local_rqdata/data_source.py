@@ -102,7 +102,7 @@ class LocalRQDataSource(AbstractDataSource):
                 "v_suspension", "is_suspended", instrument.order_book_id
             )
             keep = np.fromiter(
-                (not suspended.get(int(value // 1_000_000), False) for value in bars["datetime"]),
+                (not suspended[int(value // 1_000_000)] for value in bars["datetime"]),
                 dtype=bool,
                 count=len(bars),
             )
@@ -125,13 +125,21 @@ class LocalRQDataSource(AbstractDataSource):
             )
         return bars if fields is None else bars[fields]
 
+    def _checked_status(self, view, field, order_book_id, dates):
+        values = self.store.status(view, field, order_book_id)
+        result = []
+        for day in dates:
+            key = date_key(day)
+            if key not in values:
+                raise ValueError(f"Missing historical {field}: {order_book_id} {key}")
+            result.append(values[key])
+        return result
+
     def is_suspended(self, order_book_id: str, dates: Sequence) -> List[bool]:
-        values = self.store.status("v_suspension", "is_suspended", order_book_id)
-        return [values.get(date_key(value), False) for value in dates]
+        return self._checked_status("v_suspension", "is_suspended", order_book_id, dates)
 
     def is_st_stock(self, order_book_id: str, dates: Sequence) -> List[bool]:
-        values = self.store.status("v_st_flag", "is_st", order_book_id)
-        return [values.get(date_key(value), False) for value in dates]
+        return self._checked_status("v_st_flag", "is_st", order_book_id, dates)
 
     def get_dividend(self, instrument):
         return self.store.dividends(instrument.order_book_id)

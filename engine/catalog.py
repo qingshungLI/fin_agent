@@ -125,7 +125,13 @@ def seed_structure(index: int, run_id: str) -> Structure:
         mechanism = "异常换手吸引有限注意力并形成短期价格压力；关注消退后价格回归。注意力机制预测小市值、低平均单笔成交额的股票中反转更强。"
         sides = [("market_cap_pct", -1), ("avg_trade_size_pct", -1)]
     if form == 1:
-        expressions = [expressions[1], expressions[2], expressions[0]]
+        if family == "M2":
+            expressions = ["neg(xs_z(ret_5d))", "neg(xs_rank(ret_3d))",
+                           "neg(sub(ret_1d, industry_mean(ret_1d)))"]
+        else:
+            expressions = ["neg(xs_rank(turnover_today))",
+                           "neg(xs_z(log(turnover_today)))",
+                           "neg(xs_rank(avg_trade_size))"]
     assertions = [
         Assertion(id="P1", kind="shape", subject="dose_shape", relation="monotone_up",
                   attribution="交易信号已取反，信号升高对应更强的未来反转补偿"),
@@ -198,3 +204,17 @@ def freeze_cuts(fields: dict[str, pd.DataFrame], names: list[str], seed: int) ->
                                                 "lower": float(lower[j]), "upper": float(upper[j])}
             previous_upper = upper[j]
     return result
+
+
+def check_convergent_orientation(structure, fields, cuts):
+    """Reject strongly contradictory operationalizations without reading labels."""
+    from engine.metrics import daily_ic
+    values = [evaluate(expr, fields, cuts) for expr in structure.operational]
+    correlations = []
+    for i in range(3):
+        for j in range(i + 1, 3):
+            correlation = daily_ic(values[i], values[j]).mean()
+            if np.isfinite(correlation) and correlation < -0.2:
+                raise ValueError("Operationalizations have contradictory orientations; no returns were read")
+            correlations.append(float(correlation) if np.isfinite(correlation) else None)
+    return {"pairwise_feature_correlations": correlations, "uses_returns": False}

@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.integrate import trapezoid
 
 
 def build_design_matrix(frame: pd.DataFrame, stage: str) -> tuple[np.ndarray, list[str]]:
@@ -29,7 +30,7 @@ def prior_overlap(samples: np.ndarray, prior: np.ndarray) -> float:
         return 1.0
     grid = np.linspace(min(np.quantile(samples, 0.001), np.quantile(prior, 0.001)),
                        max(np.quantile(samples, 0.999), np.quantile(prior, 0.999)), 250)
-    return float(np.clip(np.trapz(np.minimum(stats.gaussian_kde(samples)(grid),
+    return float(np.clip(trapezoid(np.minimum(stats.gaussian_kde(samples)(grid),
                                              stats.gaussian_kde(prior)(grid)), grid), 0, 1))
 
 
@@ -64,12 +65,12 @@ def fit_hierarchy(frame: pd.DataFrame, seed: int = 42, draws: int = 1000) -> dic
         predictor = mu
         for group in groups:
             scale = pm.HalfNormal("sigma_" + group, sigma=0.02)
-            raw = pm.Normal("raw_" + group, 0, 1, dims=group)
-            effect = pm.Deterministic("effect_" + group, (raw - pm.math.mean(raw)) * scale, dims=group)
+            raw = pm.ZeroSumNormal("raw_" + group, sigma=1, dims=group)
+            effect = pm.Deterministic("effect_" + group, raw * scale, dims=group)
             predictor = predictor + effect[encodings[group]]
         pm.Normal("observed", predictor, sigma=frame.se.to_numpy(), observed=frame["mean"].to_numpy())
         trace = pm.sample(draws=draws, tune=draws, chains=4, cores=1, random_seed=seed,
-                          target_accept=0.95, progressbar=False, return_inferencedata=True)
+                          target_accept=0.99, progressbar=False, return_inferencedata=True)
         prior = pm.sample_prior_predictive(samples=1000, random_seed=seed)
     diagnostic = az.summary(trace, var_names=["mu", *["sigma_" + key for key in groups]])
     divergence = int(trace.sample_stats.diverging.sum())

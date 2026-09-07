@@ -10,3 +10,11 @@ __pycache__/
 artifacts/
 .ruff_cache/
 playwright-results/
+
+*.egg-info/
+build/
+.env.*
+!.env.example
+
+# Licensed vendor responses are reproducible server-only artifacts.
+data/industry_sws_daily/

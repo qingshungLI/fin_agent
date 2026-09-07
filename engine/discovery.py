@@ -9,13 +9,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
 from engine.config import ResearchConfig
 from engine.data import MarketPanel
-from engine.metrics import summarize, holm
+from engine.metrics import holm, summarize
 
 
 def purged_folds(dates: np.ndarray, folds: int = 5, purge: int = 15) -> list[tuple[np.ndarray, np.ndarray]]:
@@ -35,20 +35,33 @@ def purged_folds(dates: np.ndarray, folds: int = 5, purge: int = 15) -> list[tup
 
 
 def orthogonalize(frame: pd.DataFrame, controls: list[str]) -> pd.DataFrame:
-    """在单一授权段独立交叉拟合收益和信号；返回残差长表，行业哑变量无序处理。"""
+    """Purged cross-fit with sparse industry indicators and an equivalent intercept."""
+    from scipy.sparse import csr_matrix, hstack
+    from sklearn.preprocessing import OneHotEncoder
     required = ["date", "symbol", "f", "r", *controls]
     if frame[required].isna().any().any():
         raise ValueError("交叉拟合输入存在缺失；必须先记录并剔除完整案例外观测")
-    design = pd.get_dummies(frame[controls], columns=[c for c in controls if frame[c].dtype == object], dtype=float)
-    if design.shape[1] == 0 or not np.isfinite(design.to_numpy()).all():
-        raise ValueError("控制变量为空或包含非有限值")
+    categorical = [c for c in controls if frame[c].dtype == object]
+    numeric = [c for c in controls if c not in categorical]
+    blocks = []
+    if numeric:
+        blocks.append(csr_matrix(frame[numeric].to_numpy(dtype=float)))
+    if categorical:
+        blocks.append(OneHotEncoder(sparse_output=True, dtype=float).fit_transform(frame[categorical]))
+    if not blocks:
+        raise ValueError("控制变量为空")
+    design = hstack(blocks, format="csr")
+    if not np.isfinite(design.data).all():
+        raise ValueError("控制变量包含非有限值")
     result = frame.copy()
     result["r_resid"], result["f_resid"] = np.nan, np.nan
     for train, test in purged_folds(frame.date.to_numpy()):
+        # Sparse scaling omits centering; Ridge's intercept absorbs that offset.
         for target in ("r", "f"):
-            model = make_pipeline(StandardScaler(), Ridge(alpha=1.0))
-            model.fit(design.loc[train], frame.loc[train, target])
-            result.loc[test, target + "_resid"] = frame.loc[test, target] - model.predict(design.loc[test])
+            model = make_pipeline(StandardScaler(with_mean=False),
+                                  Ridge(alpha=1.0, solver="lsqr", tol=1e-10))
+            model.fit(design[train], frame.loc[train, target])
+            result.loc[test, target + "_resid"] = frame.loc[test, target] - model.predict(design[test])
     return result
 
 
@@ -158,32 +171,41 @@ def forest_propose(
     weights = f ** 2
     rng = np.random.default_rng(config.seed)
     votes = np.zeros(len(candidates))
+    date_codes = np.searchsorted(dates, residual.date.to_numpy())
+    symbol_codes, symbol_names = pd.factorize(residual.symbol, sort=False)
+    block_codes = date_codes // 20
+    topology_cache = {}
     valid_trees, leaf_effects = 0, []
     for tree_index in range(config.n_trees):
         training_dates = dates[:cutoff - 15]
         starts = rng.integers(0, len(training_dates) - 19, size=max(1, len(training_dates) // 20))
-        sampled_days = training_dates[(starts[:, None] + np.arange(20)).ravel()]
-        multiplicity = pd.Series(sampled_days).value_counts()
-        bootstrap_weights = residual.date.map(multiplicity).fillna(0).to_numpy() * weights
+        sampled_positions = (starts[:, None] + np.arange(20)).ravel()
+        multiplicity = np.bincount(sampled_positions, minlength=len(dates))
+        bootstrap_weights = multiplicity[date_codes] * weights
         fitting = train & eligible & (bootstrap_weights > 0)
         model = DecisionTreeRegressor(max_depth=2, random_state=config.seed + tree_index, min_samples_leaf=100)
         model.fit(design[fitting], target[fitting], sample_weight=bootstrap_weights[fitting])
-        leaves = model.apply(design)
-        accepted = True
-        effects = []
-        for leaf in np.unique(leaves):
-            for half in (train, estimate):
-                selected = (leaves == leaf) & half & eligible
-                independent_blocks = residual.loc[selected, "date"].map({date: i // 20 for i, date in enumerate(dates)}).nunique()
-                if independent_blocks < 20 or residual.loc[selected, "symbol"].nunique() < 100:
-                    accepted = False
-            selected = (leaves == leaf) & estimate & eligible
-            denominator = float(np.sum(weights[selected]))
-            if denominator > 1e-12:
-                effects.append(float(np.dot(f[selected], r[selected]) / denominator))
+        key = tuple(a.tobytes() for a in (model.tree_.feature, model.tree_.threshold,
+                                            model.tree_.children_left, model.tree_.children_right))
+        if key not in topology_cache:
+            leaves = model.apply(design)
+            accepted, effects = True, []
+            for leaf in np.unique(leaves):
+                for half in (train, estimate):
+                    selected = (leaves == leaf) & half & eligible
+                    independent_blocks = np.count_nonzero(np.bincount(block_codes[selected]))
+                    distinct_symbols = np.count_nonzero(np.bincount(symbol_codes[selected], minlength=len(symbol_names)))
+                    if independent_blocks < 20 or distinct_symbols < 100:
+                        accepted = False
+                selected = (leaves == leaf) & estimate & eligible
+                denominator = float(np.sum(weights[selected]))
+                if denominator > 1e-12:
+                    effects.append(float(np.dot(f[selected], r[selected]) / denominator))
+            used = set(model.tree_.feature[model.tree_.feature >= 0])
+            topology_cache[key] = (accepted, effects, used)
+        accepted, effects, used = topology_cache[key]
         if accepted:
             valid_trees += 1
-            used = set(model.tree_.feature[model.tree_.feature >= 0])
             for variable in used:
                 votes[variable] += 1
             leaf_effects.extend(effects)
@@ -210,7 +232,9 @@ def repeat_splits(
         if train.date.nunique() < 400 or validation.date.nunique() < 200:
             p_values.append(1.0)
             continue
+        print(f"discovery split {index + 1}/{config.n_splits}: {len(train)} train rows", flush=True)
         proposed = forest_propose(train, candidates, cuts, local)
+        print(f"discovery split {index + 1}/{config.n_splits}: forest ready", flush=True)
         if not proposed["candidates"]:
             p_values.append(1.0)
             continue
