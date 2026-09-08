@@ -15,8 +15,9 @@ def test_explicit_gpu_and_cpu_budget_configuration():
 
 
 @pytest.mark.skipif(os.environ.get("AURORA_TEST_CUDA")!="1",reason="Explicit one-GPU verification required")
-def test_real_gpu_matches_centered_multioutput_sparse_ridge():
+def test_real_gpu_matches_centered_multioutput_sparse_ridge(monkeypatch):
     from engine.gpu_ridge import ridge_predict
+    monkeypatch.setattr("engine.gpu_ridge.BATCH_ROWS", 127)
     rng=np.random.default_rng(73)
     raw=rng.normal(size=(1500,20));raw[:,1]=raw[:,0];raw[:,2]=1.
     industry=np.eye(8)[np.arange(1500)%8]
