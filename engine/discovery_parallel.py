@@ -8,6 +8,7 @@
 import ctypes
 import multiprocessing
 import os
+import sys
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -38,6 +39,15 @@ def available_memory() -> int:
         if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
             raise OSError("Cannot query available physical memory")
         return int(status.available_physical)
+    if sys.platform.startswith("linux"):
+        # MemAvailable 包含内核估算可回收的缓存；MemFree 会严重低估读过大面板的主机。
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                fields = line.split()
+                if len(fields) != 3 or fields[2] != "kB" or int(fields[1]) < 0:
+                    raise ValueError("Invalid Linux MemAvailable")
+                return int(fields[1]) * 1024
+        # 旧内核没有 MemAvailable 时保留原有保守估计。
     return int(os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE"))
 
 

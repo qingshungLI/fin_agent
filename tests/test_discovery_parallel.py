@@ -89,3 +89,23 @@ def test_inplace_nuisance_matches_copying(monkeypatch: pytest.MonkeyPatch) -> No
     pd.testing.assert_frame_equal(frame, before)
     np.testing.assert_allclose(inplace[["r_resid", "f_resid"]],
                                copied[["r_resid", "f_resid"]], rtol=1e-12, atol=1e-12)
+
+@pytest.mark.parametrize("available_kib, expected", [(750_000_000, 40), (8_000_000, 1)])
+def test_linux_available_memory_includes_reclaimable_cache(monkeypatch, available_kib, expected):
+    """Linux 缓存不应误压并发；实际低余量仍限制进程数。"""
+    from engine.discovery_parallel import available_memory
+    monkeypatch.setattr("engine.discovery_parallel.sys.platform", "linux")
+    monkeypatch.setattr(Path, "read_text", lambda self: (
+        f"MemFree:        1000000 kB\nMemAvailable: {available_kib} kB\n"))
+    result = available_memory()
+    assert result == available_kib * 1024
+    assert worker_budget(40, 40, 3_000_000, result) == expected
+
+
+def test_linux_memory_legacy_fallback(monkeypatch):
+    """旧内核缺少估算字段时继续使用保守空闲页统计。"""
+    from engine.discovery_parallel import available_memory
+    monkeypatch.setattr("engine.discovery_parallel.sys.platform", "linux")
+    monkeypatch.setattr(Path, "read_text", lambda self: "MemFree: 1000 kB\n")
+    monkeypatch.setattr(os, "sysconf", lambda key: {"SC_AVPHYS_PAGES": 123, "SC_PAGE_SIZE": 4096}[key])
+    assert available_memory() == 123 * 4096
