@@ -409,8 +409,9 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                 signal_library.append(pd.read_parquet(folder / row["id"] / "research-factor.parquet"))
         cells = build_map()
         if "queue" not in state:
-            state["queue"] = [t.model_dump() for t in initial_tasks()]
-            state["queued_keys"] = [t.key for t in initial_tasks()]
+            tasks = initial_tasks(config.initial_cells) if config.initial_cells else initial_tasks()
+            state["queue"] = [t.model_dump() for t in tasks]
+            state["queued_keys"] = [t.key for t in tasks]
         honor_control(folder, state, checkpoint)
         posterior = finish_pending(state, rows, folder, config, bayes, llm, cells, checkpoint)
         for index in range(state.get("attempts", len(rows)), config.max_structures):
@@ -447,7 +448,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                         print(f"{sid}: prior rejected; no measurement performed", flush=True)
                         continue
                     except RuntimeError as exc:
-                        if config.mode != "fast" or "DeepSeek request failed" not in str(exc):
+                        if config.initial_cells or config.mode != "fast" or "DeepSeek request failed" not in str(exc):
                             raise
                         # Fast RSI protocol records a model crash and continues with a deterministic seed.
                         # Formal mode remains fail-loud; the fallback never receives LLM evidence.
@@ -499,7 +500,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                     try:
                         bets = llm.bets(structure)
                     except RuntimeError as exc:
-                        if config.mode != "fast" or "DeepSeek request failed" not in str(exc):
+                        if config.initial_cells or config.mode != "fast" or "DeepSeek request failed" not in str(exc):
                             raise
                         bets = {a.id: {"probability": a.prior_p, "created_at": now(),
                                        "source": "fast_crash_fallback"} for a in structure.assertions}

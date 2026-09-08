@@ -6,7 +6,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 ROOT = Path(__file__).resolve().parents[1]
 HORIZONS = (1, 3, 5, 10)
@@ -48,12 +48,23 @@ class ResearchConfig(BaseModel):
     auto_evolve: bool = True
     continue_from: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,80}$")
     llm_max_calls: int = Field(default=200, ge=10, le=10000)
+    initial_cells: tuple[str, ...] = ()
+
+    @field_serializer("initial_cells")
+    def serialize_initial_cells(self, value):
+        return list(value)
 
     @model_validator(mode="after")
     def validate_protocol(self) -> "ResearchConfig":
         """检查日期和正式规模；参数来自模型，返回自身，禁止 A 段越界。"""
         from datetime import date
 
+        if self.initial_cells:
+            if (self.mode != "fast" or self.auto_evolve or self.continue_from
+                    or self.provider != "llm" or self.max_structures != len(self.initial_cells)):
+                raise ValueError("Partitioned initial cells require bounded fast LLM search without evolution")
+            if len(set(self.initial_cells)) != len(self.initial_cells):
+                raise ValueError("Initial cells must be unique")
         if self.provider == "manual" and self.max_structures > 4:
             raise ValueError("Manual provider supports four seeds; use llm or hybrid for grid search")
         start, end = date.fromisoformat(self.start), date.fromisoformat(self.end)

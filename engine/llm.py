@@ -7,6 +7,7 @@ import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,39 @@ def role_context(role: str, **values: Any) -> dict[str, Any]:
     if role not in ROLE_FIELDS or set(values) - ROLE_FIELDS[role]:
         raise ValueError("Information firewall: unapproved context fields")
     return values
+
+
+@contextmanager
+def shared_request_slot(root: Path):
+    """Optional cross-process request cap; stores no credentials or prompts."""
+    count = int(os.environ.get("AURORA_LLM_CONCURRENCY", "0"))
+    if count == 0:
+        yield
+        return
+    if not 1 <= count <= 20:
+        raise ValueError("LLM concurrency must be between 1 and 20")
+    import fcntl
+    directory = root / ".llm-request-slots"
+    directory.mkdir(parents=True, exist_ok=True)
+    handles = [(directory / str(i)).open("a+b") for i in range(count)]
+    selected = None
+    try:
+        while selected is None:
+            for handle in handles:
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    selected = handle
+                    break
+                except BlockingIOError:
+                    continue
+            if selected is None:
+                time.sleep(.05)
+        yield
+    finally:
+        if selected is not None:
+            fcntl.flock(selected, fcntl.LOCK_UN)
+        for handle in handles:
+            handle.close()
 
 
 class DeepSeek:
@@ -95,7 +129,7 @@ class DeepSeek:
         error = "unknown"
         for attempt in range(3):
             try:
-                with httpx.Client(timeout=httpx.Timeout(180, connect=15)) as client:
+                with shared_request_slot(self.root.parent), httpx.Client(timeout=httpx.Timeout(180, connect=15)) as client:
                     response = client.post(self.base + "/chat/completions", json=body,
                                            headers={"Authorization": "Bearer " + self.key})
                 if response.status_code in {401, 403, 402}:

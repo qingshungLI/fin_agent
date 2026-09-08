@@ -26,7 +26,7 @@ class ProposalTask(BaseModel):
         return digest(self.model_dump())
 
 
-def initial_tasks() -> list[ProposalTask]:
+def initial_tasks(coordinates: tuple[str, ...] = ()) -> list[ProposalTask]:
     """Factorial start, then cover all seven feasible forms before filling rows."""
     ordered = [("M2", 3), ("M2", 1), ("M1", 3), ("M1", 1),
                ("M1", 2), ("M4", 4), ("M10", 5), ("M2", 6), ("M5", 7)]
@@ -37,6 +37,12 @@ def initial_tasks() -> list[ProposalTask]:
         if pair not in seen:
             result.append(ProposalTask(family=pair[0], form=pair[1]))
             seen.add(pair)
+    if coordinates:
+        available = {f"{task.family}-F{task.form}": task for task in result}
+        unknown = set(coordinates) - set(available)
+        if unknown or len(set(coordinates)) != len(coordinates):
+            raise ValueError("Unknown or duplicated initial research cells")
+        return [available[key] for key in coordinates]
     return result
 
 
