@@ -238,7 +238,7 @@ def runtime_identity() -> dict[str, str]:
     """Return installed runtime versions; no arguments, assumes local metadata."""
     from importlib.metadata import PackageNotFoundError, version
     environment = {"python": sys.version.split()[0]}
-    for package in ("numpy", "pandas", "scipy", "scikit-learn", "pymc", "pyarrow"):
+    for package in ("numpy", "pandas", "scipy", "scikit-learn", "pymc", "pyarrow", "cupy-cuda12x"):
         try:
             environment[package] = version(package)
         except PackageNotFoundError:

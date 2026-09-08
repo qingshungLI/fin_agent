@@ -37,7 +37,8 @@ class ResearchConfig(BaseModel):
     commission_bp: float = Field(default=3, ge=0, le=100)
     slippage_bp: float = Field(default=5, ge=0, le=100)
     stamp_tax_bp: float = Field(default=10, ge=0, le=100)
-    workers: int = Field(default=2, ge=1, le=8)
+    workers: int = Field(default=2, ge=1, le=40)
+    nuisance_backend: Literal["cpu", "cuda"] = "cpu"
     mode: Literal["formal", "engineering", "fast"] = "formal"
     provider: Literal["manual", "llm", "hybrid"] = "manual"
     industry_policy: Literal["strict", "quarantine"] = "strict"

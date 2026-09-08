@@ -22,6 +22,8 @@ def main() -> int:
     p.add_argument("--max-symbols", type=int, default=0)
     p.add_argument("--max-structures", type=int, default=4)
     p.add_argument("--workers", type=int, default=3)
+    p.add_argument("--nuisance-backend", choices=["cpu", "cuda"], default="cpu")
+    p.add_argument("--discovery-splits", type=int, default=None)
     p.add_argument("--provider", choices=["manual", "llm", "hybrid"], default="manual")
     p.add_argument("--industry-policy", choices=["strict", "quarantine"], default="strict")
     p.add_argument("--industry-source", choices=["exact_intervals", "rqdata_daily"], default="exact_intervals")
@@ -33,7 +35,7 @@ def main() -> int:
     p.add_argument("--discovery", action="store_true")
     p.add_argument("--bayes", action="store_true")
     p.add_argument("--full-grid", action="store_true",
-                   help="Cover all active cells and reserve a separate evolution budget")
+                   help="Budget initial components and prioritize heterogeneous evolution")
     p.add_argument("--llm-max-calls", type=int, default=None)
     p.add_argument("--evolution-budget", type=int, default=140)
     p.add_argument("--continue-from", default=None)
@@ -59,6 +61,7 @@ def main() -> int:
     config = ResearchConfig(start=args.start, end=args.end, max_symbols=args.max_symbols,
                             max_structures=args.max_structures, workers=args.workers,
                             provider=args.provider, llm_max_calls=args.llm_max_calls,
+                            nuisance_backend=args.nuisance_backend,
                             continue_from=args.continue_from,
                             industry_policy=args.industry_policy,
                             industry_source=args.industry_source, auction_policy=args.auction_policy,
@@ -67,7 +70,7 @@ def main() -> int:
                             n_boot=100 if args.fast else 200 if args.engineering else 1000,
                             n_placebo=19 if args.fast else 150 if args.engineering else 500,
                             n_trees=30 if args.fast else 50 if args.engineering else 500,
-                            n_splits=2 if args.fast else 5 if args.engineering else 20)
+                            n_splits=args.discovery_splits or (2 if args.fast else 5 if args.engineering else 20))
     run_id = args.run_id or datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     try:
         run_research(config, run_id, args.data_root, args.output_root, args.discovery, args.bayes)

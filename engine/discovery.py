@@ -34,7 +34,7 @@ def purged_folds(dates: np.ndarray, folds: int = 5, purge: int = 15) -> list[tup
     return output
 
 
-def orthogonalize(frame: pd.DataFrame, controls: list[str]) -> pd.DataFrame:
+def orthogonalize(frame: pd.DataFrame, controls: list[str], backend: str = "cpu") -> pd.DataFrame:
     """Purged nonlinear nuisance cross-fit with sparse industry indicators.
 
     A fixed spline/cubic basis covers smooth nonlinearities and control interactions.
@@ -77,10 +77,20 @@ def orthogonalize(frame: pd.DataFrame, controls: list[str]) -> pd.DataFrame:
         del train_blocks, test_blocks
         if not np.isfinite(design_train.data).all() or not np.isfinite(design_test.data).all():
             raise ValueError("控制变量包含非有限值")
-        model = make_pipeline(StandardScaler(with_mean=False, copy=False),
-                              Ridge(alpha=1.0, solver="lsqr", tol=1e-10, copy_X=False))
-        model.fit(design_train, frame.loc[train, ["r", "f"]])
-        residuals = frame.loc[test, ["r", "f"]].to_numpy() - model.predict(design_test)
+        if backend == "cuda":
+            from engine.gpu_ridge import ridge_predict
+            model = StandardScaler(with_mean=False, copy=False)
+            design_train = model.fit_transform(design_train)
+            design_test = model.transform(design_test)
+            prediction = ridge_predict(design_train, frame.loc[train, ["r", "f"]].to_numpy(), design_test)
+        elif backend == "cpu":
+            model = make_pipeline(StandardScaler(with_mean=False, copy=False),
+                                  Ridge(alpha=1.0, solver="lsqr", tol=1e-10, copy_X=False))
+            model.fit(design_train, frame.loc[train, ["r", "f"]])
+            prediction = model.predict(design_test)
+        else:
+            raise ValueError("Unknown nuisance backend")
+        residuals = frame.loc[test, ["r", "f"]].to_numpy() - prediction
         result.loc[test, ["r_resid", "f_resid"]] = residuals
         # 每折设计仅使用一次，原地缩放和及时释放避免与下一折重叠驻留。
         del design_train, design_test, model
@@ -141,7 +151,7 @@ def blade_icm(frame: pd.DataFrame, moderator: str, cut: float, horizon: int, con
     """检验冻结门函数的正交交互矩；返回块乘子 p/e，同一时间块使用同一乘子。"""
     from engine.evidence import calibrate_p_to_e
 
-    residuals = orthogonalize(frame, ["log_cap", "volatility", "log_turnover", "industry"])
+    residuals = orthogonalize(frame, ["log_cap", "volatility", "log_turnover", "industry"], config.nuisance_backend)
     f, r = residuals.f_resid.to_numpy(), residuals.r_resid.to_numpy()
     h = np.where(residuals[moderator].to_numpy() > cut, 1.0, -1.0)
     denom = np.dot(f, f)
@@ -184,7 +194,7 @@ def forest_propose(
     cutoff = len(dates) // 2
     if cutoff < 400 or frame.loc[frame.date.isin(dates[:max(0, cutoff-15)]), "symbol"].nunique() < 100:
         return {"candidates": [], "reason": "honest 半段不足 20 个日期块及 100 只证券"}
-    residual = orthogonalize(frame, ["log_cap", "volatility", "log_turnover", "industry"])
+    residual = orthogonalize(frame, ["log_cap", "volatility", "log_turnover", "industry"], config.nuisance_backend)
     train = residual.date.isin(dates[:max(0, cutoff - 15)]).to_numpy()
     estimate = residual.date.isin(dates[cutoff:]).to_numpy()
     if cutoff < 400 or residual.loc[train, "symbol"].nunique() < 100:
