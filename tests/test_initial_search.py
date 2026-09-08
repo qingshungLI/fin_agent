@@ -55,3 +55,10 @@ def test_shared_llm_slots_bound_simultaneous_requests(tmp_path,monkeypatch):
             with lock:counts["active"]-=1
     with ThreadPoolExecutor(max_workers=6) as pool:list(pool.map(request,range(12)))
     assert counts["peak"]==2 and counts["active"]==0
+
+def test_parent_and_spawned_worker_cache_configuration_match():
+    import json
+    from engine.initial_search import normalized_config
+    parent=normalized_config(ResearchConfig(mode="fast",provider="llm",auto_evolve=False))
+    worker=ResearchConfig.model_validate(parent.model_dump())
+    assert json.dumps(parent.model_dump(),sort_keys=True)==json.dumps(worker.model_dump(),sort_keys=True)

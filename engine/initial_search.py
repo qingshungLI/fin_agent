@@ -109,6 +109,11 @@ def summarize(campaign):
     return len(rows)
 
 
+def normalized_config(config):
+    """Match the validated worker representation before computing cache identity."""
+    return ResearchConfig.model_validate(config.model_dump())
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--run-id",required=True)
@@ -140,6 +145,7 @@ def main():
         workers=args.cpus_per_search,seed=20260908,n_boot=100,n_placebo=19,n_trees=30,n_splits=2,
         auto_evolve=False,industry_policy="strict",industry_source="rqdata_daily",data_profile="daily",
         llm_max_calls=120)
+    config=normalized_config(config)
     campaign=ROOT/"artifacts"/args.run_id
     campaign.mkdir(parents=True,exist_ok=False)
     manifest={"run_id":args.run_id,"status":"PREPARING","stage":"initial_only","formal":False,
@@ -171,6 +177,8 @@ def main():
                 directory=campaign/"shards"/f"g{index+1:02d}"
                 (directory/shard_id).mkdir(parents=True,exist_ok=False)
                 (ROOT/"artifacts"/shard_id).symlink_to(directory/shard_id,target_is_directory=True)
+                (ROOT/"artifacts"/"jobs").mkdir(exist_ok=True)
+                (ROOT/"artifacts"/"jobs"/f"{shard_id}.log").symlink_to(directory/"worker.log")
                 task={"run_id":shard_id,"config":shard_config.model_dump(),
                       "directory":str(campaign/"shards"/f"g{index+1:02d}"),
                       "data_root":str(args.data_root.resolve()),
