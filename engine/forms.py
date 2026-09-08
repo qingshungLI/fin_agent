@@ -13,16 +13,19 @@ BASE_FIELDS = {
     "ret_1d", "ret_3d", "ret_5d", "ret_20d", "turnover_today", "avg_trade_size",
     "gap_open", "ret_intraday", "realized_vol", "amihud", "auction_imbalance",
     "auction_turnover_share", "dist_52w_high",
+    "constraint_pressure", "limit_up_distance", "index_known_weight", "index_weight_change",
+    "uncertainty_level", "uncertainty_change", "book_to_price", "earnings_yield",
 }
 FAMILY_FIELDS = {
     "M1": {"ret_1d", "turnover_today", "avg_trade_size"},
     "M2": {"ret_1d", "ret_3d", "ret_5d", "amihud"},
     "M3": {"dist_52w_high", "turnover_today"},
     "M4": {"ret_1d", "ret_5d", "turnover_today"},
-    "M5": {"ret_1d", "ret_intraday", "gap_open"},
-    "M6": set(),  # Index observation fields require their own PIT registration.
+    "M5": {"constraint_pressure", "limit_up_distance"},
+    "M6": {"index_known_weight", "index_weight_change"},
     "M7": {"avg_trade_size", "ret_5d"},
-    "M9": {"ret_1d", "gap_open"},
+    "M8": {"book_to_price", "earnings_yield", "realized_vol"},
+    "M9": {"uncertainty_level", "uncertainty_change"},
     "M10": {"gap_open", "ret_intraday", "auction_imbalance", "auction_turnover_share"},
 }
 MODERATORS = {
@@ -31,16 +34,21 @@ MODERATORS = {
 }
 EVENTS = {
     "failed_limit_up": "failed_limit_up",
+    "constraint_event": "constraint_event",
+    "index_observation": "index_snapshot_event",
+    "uncertainty_resolution": "uncertainty_resolution",
+    "risk_shock": "abs(ts_z(realized_vol, 60)) > 3",
     "return_shock": "abs(ts_z(ret_1d, 60)) > 3",
     "turnover_shock": "ts_z(turnover_today, 60) > 3",
+    "trade_size_shock": "abs(ts_z(avg_trade_size, 60)) > 3",
     "gap_shock": "abs(ts_z(gap_open, 60)) > 3",
     "resumption": "not_suspended and (lag(not_suspended, 1) == False)",
 }
 EVENT_FAMILIES = {
     "M1": ["turnover_shock"], "M2": ["return_shock"],
     "M3": ["return_shock"], "M4": ["return_shock"],
-    "M5": ["failed_limit_up", "resumption"], "M6": [],
-    "M9": ["resumption"], "M10": ["gap_shock"],
+    "M5": ["failed_limit_up", "resumption", "constraint_event"], "M6": ["index_observation"],
+    "M7": ["trade_size_shock"], "M8": ["risk_shock"], "M9": ["resumption", "uncertainty_resolution"], "M10": ["gap_shock"],
 }
 
 
@@ -65,14 +73,23 @@ def form_contract(form: int, fields: set[str], cuts: dict[str, Any], family: str
         except ValueError:
             continue
         events[name] = EVENTS[name]
+    base_fields = FAMILY_FIELDS.get(family, BASE_FIELDS)
+    if family == "M4" and form == 1:
+        base_fields = {"ret_1d"}
+    elif family in {"M5", "M9"} and form in {6, 7}:
+        base_fields = base_fields | {"ret_1d", "ret_intraday", "gap_open"}
+    pair_fields = BASE_FIELDS
+    if family == "M8":
+        pair_fields = {"realized_vol", "amihud", "turnover_today"}
     return {
-        "form": form, "base_fields": sorted(fields & FAMILY_FIELDS.get(family, BASE_FIELDS)),
-        "pair_fields": sorted(fields & BASE_FIELDS),
+        "form": form, "base_fields": sorted(fields & base_fields),
+        "pair_fields": sorted(fields & pair_fields),
         "pair_required": form == 5,
         "condition_required": form == 6,
         "allowed_cuts": {key: {"field": row["field"], "side": row["side"]}
                          for key, row in cuts.items() if row["field"] in MODERATORS} if form == 6 else {},
         "event_required": form == 7, "allowed_events": events if form == 7 else {},
+        "construction": "lagged industry-minus-stock return gap" if family == "M4" and form == 1 else "registered base field",
         "information": "T close information only; cut IDs frozen using A features, no outcomes",
     }
 
@@ -93,7 +110,12 @@ def compile_form(form: int, plan: OperationalPlan, fields: set[str],
     coverage = "in_pool"
     event_expression = None
     if form == 1:
-        expressions = level
+        if family == "M4":
+            # A relational gap supplies an observable level without future peer returns.
+            gap = f"sub(industry_mean(lag({x}, 1)), lag({x}, 1))"
+            expressions = [f"xs_rank({gap})", f"xs_z({gap})", f"xs_rank(ts_mean({gap}, 3))"]
+        else:
+            expressions = level
     elif form == 2:
         expressions = [f"xs_rank(diff({x}, 1))", f"xs_z(diff({x}, 1))",
                        f"xs_rank(diff(ts_mean({x}, 3), 1))"]

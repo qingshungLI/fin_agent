@@ -170,12 +170,13 @@ def run_blades(
     primary = next(row for row in measurement["curves"] if row["expression"] == 1 and row["horizon"] == structure.primary_horizon)
     base = {"verdict": "UNDECIDABLE", "formal": False, "assertions": [],
             "placebo": {"state": "untested"}, "increment": {"state": "untested"}, "icm": None}
-    if primary["mde"] is None or primary["mde"] > config.min_effect or primary["days"] < config.min_dates:
+    if primary["days"] < config.min_dates or (config.mode != "fast" and
+            (primary["mde"] is None or primary["mde"] > config.min_effect)):
         return {**base, "reason": "有效样本不足以在 80% 功效下检出事前最小效应", "gate": "closed"}
     placebo = blade_placebo(stored["signal_0"],
                              panel.labels[f"industry_resid_{structure.primary_horizon}"],
                              config, structure.primary_horizon, eligibility=panel.fields["in_pool"] & panel.fields["not_st"])
-    if placebo["state"] != "pass":
+    if placebo["state"] != "pass" and config.mode != "fast":
         return {**base, "placebo": placebo, "gate": "open", "reason": "安慰剂未通过；停止机制解读，回查度量与时序伪影"}
     assertions = blade_assertion(structure, panel, stored, config)
     increment = blade_increment(stored["signal_0"], panel.labels[f"industry_resid_{structure.primary_horizon}"],

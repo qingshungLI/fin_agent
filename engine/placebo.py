@@ -6,6 +6,7 @@ Short spells remain unchanged in the statistic rather than being dropped.
 """
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 import numpy as np
 import pandas as pd
@@ -98,7 +99,7 @@ def within_day_surrogate(x, rng):
 def full_market_placebo(signal, returns, config, horizon=5, eligibility=None):
     if config.max_symbols and config.mode == "formal":
         raise ValueError("Formal placebo requires the full market: max_symbols=0")
-    if config.n_placebo < 100:
+    if config.n_placebo < 100 and config.mode != "fast":
         return {"state":"untested","reason":"99 repeats cannot attain p<0.01","tests":[],
                 "stocks":0,"dates":0,"selection":"all daily eligible securities"}
     xframe = signal.iloc[len(signal)//2:].iloc[:-11]
@@ -123,11 +124,11 @@ def full_market_placebo(signal, returns, config, horizon=5, eligibility=None):
             "scope":"conditional on coverage mask; temporal exchangeability is a separate calibration requirement"}
     if len(x)<60 or baseline is None:
         return {**base,"state":"untested","reason":"insufficient daily observed cross-sections","tests":[]}
-    plan = spell_plan(x)
+    plan = [] if config.mode == "fast" else spell_plan(x)
     base["fixed_short_observations"] = {
         "time_shift":int(sum(s.values.size for s in plan if len(s.values)<=2*horizon+1)),
         "iaaft":int(sum(s.values.size for s in plan if len(s.values)<4))}
-    kinds = ("within_day","time_shift","iaaft")
+    kinds = ("within_day",) if config.mode == "fast" else ("within_day","time_shift","iaaft")
     def task(item):
         kind_index, start, count = item
         kind = kinds[kind_index]
@@ -145,17 +146,44 @@ def full_market_placebo(signal, returns, config, horizon=5, eligibility=None):
                 raise ValueError("A surrogate lost all valid cross-sections")
             null.append(value)
         return kind,null,max_error
-    jobs = [(k,start,min(10,config.n_placebo-start)) for k in range(3)
-            for start in range(0,config.n_placebo,10)]
-    with ThreadPoolExecutor(max_workers=config.workers) as pool:
-        pieces = list(pool.map(task,jobs))
     tests = []
-    for kind in kinds:
-        selected = [p for p in pieces if p[0]==kind]
-        null = [v for p in selected for v in p[1]]
-        error = max(p[2] for p in selected)
-        p = float((1+np.count_nonzero(np.asarray(null)>=baseline))/(len(null)+1))
-        tests.append({"kind":kind,"p":p,"quantile":1-p,"null":null,"observed":baseline,
-                      "spectral_error":error if kind=="iaaft" else None,
-                      "state":"pass" if p<.01 and error<.1 else "fail"})
-    return {**base,"state":"pass" if all(t["state"]=="pass" for t in tests) else "fail","tests":tests}
+    skipped_tests = []
+    for kind_index, kind in enumerate(kinds):
+        started = perf_counter()
+        print(f"placebo {kind}: starting {config.n_placebo} repeats", flush=True)
+        pieces = []
+        batch_size = 1 if kind == "iaaft" else 10
+        jobs = [(kind_index, start, min(batch_size, config.n_placebo - start))
+                for start in range(0, config.n_placebo, batch_size)]
+        with ThreadPoolExecutor(max_workers=config.workers) as pool:
+            for offset in range(0, len(jobs), config.workers):
+                pieces.extend(pool.map(task, jobs[offset:offset + config.workers]))
+                completed = sum(len(part[1]) for part in pieces)
+                error = max(part[2] for part in pieces)
+                if kind == "iaaft" and error >= .1:
+                    tests.append({"kind": kind, "state": "untested", "p": None,
+                                  "spectral_error": error, "completed_repeats": completed,
+                                  "null": [v for part in pieces for v in part[1]],
+                                  "observed": baseline,
+                                  "reason": "surrogate spectral quality gate failed"})
+                    return {**base, "state": "untested", "tests": tests,
+                            "reason": "invalid IAAFT surrogate; not evidence against the factor",
+                            "skipped_tests": [], "stopped_early": True}
+                print(f"placebo {kind}: {completed}/{config.n_placebo} "
+                      f"in {perf_counter() - started:.1f}s", flush=True)
+        null = [value for piece in pieces for value in piece[1]]
+        error = max(piece[2] for piece in pieces)
+        p = float((1 + np.count_nonzero(np.asarray(null) >= baseline)) / (len(null) + 1))
+        result = {"kind": kind, "p": p, "quantile": 1 - p, "null": null,
+                  "observed": baseline, "spectral_error": error if kind == "iaaft" else None,
+                  "state": "pass" if p < .01 and error < .1 else "fail"}
+        tests.append(result)
+        # IAAFT is expensive; after a cheaper null fails, the conjunction is fixed.
+        if result["state"] != "pass":
+            skipped_tests = list(kinds[kind_index + 1:])
+            break
+    if config.mode == "fast":
+        return {**base, "state": "untested", "tests": tests,
+                "skipped_tests": ["time_shift", "iaaft"], "profile": "fast",
+                "reason": "Exploratory diagnostic only; full placebo confirmation deferred"}
+    return {**base,"state":"pass" if all(t["state"]=="pass" for t in tests) else "fail","tests":tests,"skipped_tests":skipped_tests}

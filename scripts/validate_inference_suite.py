@@ -71,6 +71,7 @@ def main():
             "scope":"specified nonlinear/heteroskedastic/date-correlated synthetic cases; not universal certification",
             "code_sha256":{p.name:file_hash(p) for p in Path("engine").glob("*.py")},
             "uses_market_data":False}
+    Path("artifacts/validation").mkdir(parents=True, exist_ok=True)
     Path("artifacts/validation/inference-suite.json").write_text(json.dumps(report,indent=2))
     print(json.dumps(rows),flush=True)
     return 0 if report["passed"] else 2

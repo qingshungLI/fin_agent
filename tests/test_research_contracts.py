@@ -140,7 +140,7 @@ def test_resume_rejects_tampered_frozen_cut_before_loading_market_data(tmp_path,
     config = ResearchConfig()
     write_json(folder / "checkpoint.json", {
         "status": "COMPLETED", "run_id": "resume-test", "completed": [],
-        "identity": {"config": config.model_dump(), "data_root": str(data.resolve()),
+        "identity": {"environment": pipeline.runtime_identity(), "config": config.model_dump(), "data_root": str(data.resolve()),
                      "discovery": False, "bayes": False, "model": None, "code": {}, "sources": {}},
         "artifact_hashes": {"cuts.json": file_hash(cut)}})
     write_json(cut, {"fixed": 70})

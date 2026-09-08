@@ -27,17 +27,18 @@ class ResearchConfig(BaseModel):
     max_symbols: int = Field(default=0, ge=0, le=6000)
     seed: int = Field(default=20260907, ge=0)
     n_boot: int = Field(default=1000, ge=100, le=10000)
-    n_placebo: int = Field(default=500, ge=99, le=2000)
+    n_placebo: int = Field(default=500, ge=9, le=2000)
     n_trees: int = Field(default=500, ge=10, le=2000)
     n_splits: int = Field(default=20, ge=2, le=50)
-    max_structures: int = Field(default=4, ge=1, le=30)
+    max_structures: int = Field(default=4, ge=1, le=1000)
     min_effect: float = Field(default=0.05, gt=0, lt=1)
     min_dates: int = Field(default=200, ge=40)
     min_cross_section: int = Field(default=30, ge=10)
     commission_bp: float = Field(default=3, ge=0, le=100)
     slippage_bp: float = Field(default=5, ge=0, le=100)
+    stamp_tax_bp: float = Field(default=10, ge=0, le=100)
     workers: int = Field(default=2, ge=1, le=8)
-    mode: Literal["formal", "engineering"] = "formal"
+    mode: Literal["formal", "engineering", "fast"] = "formal"
     provider: Literal["manual", "llm", "hybrid"] = "manual"
     industry_policy: Literal["strict", "quarantine"] = "strict"
     industry_source: Literal["exact_intervals", "rqdata_daily"] = "exact_intervals"
@@ -45,13 +46,16 @@ class ResearchConfig(BaseModel):
     data_profile: Literal["full", "daily"] = "full"
     cache: bool = True
     auto_evolve: bool = True
-    llm_max_calls: int = Field(default=200, ge=10, le=600)
+    continue_from: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,80}$")
+    llm_max_calls: int = Field(default=200, ge=10, le=10000)
 
     @model_validator(mode="after")
     def validate_protocol(self) -> "ResearchConfig":
         """检查日期和正式规模；参数来自模型，返回自身，禁止 A 段越界。"""
         from datetime import date
 
+        if self.provider == "manual" and self.max_structures > 4:
+            raise ValueError("Manual provider supports four seeds; use llm or hybrid for grid search")
         start, end = date.fromisoformat(self.start), date.fromisoformat(self.end)
         if start < date(2016, 7, 1) or end > date.fromisoformat(EXPLORE_END) or start >= end:
             raise ValueError("探索日期必须位于 2016-07-01 至 2022-06-30 且开始早于结束")

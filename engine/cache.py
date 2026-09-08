@@ -25,15 +25,15 @@ def cached_panel(data_root, config, cache_root, *, start=None, end=None):
     # Cache identity includes all input data content and implementation. Never
     # accept a same-sized/mmtime-only replacement of source data.
     inputs = {str(p.relative_to(data_root)): file_hash(p) for p in sorted(data_root.rglob("*.parquet"))}
-    code = {p.name: file_hash(p) for p in [Path(__file__).parent / name for name in ("data.py", "config.py", "cache.py")]}
+    code = {p.name: file_hash(p) for p in [Path(__file__).parent / name for name in ("data.py", "config.py", "cache.py", "research_fields.py")]}
     identity = {"data": inputs, "code": code, "config": config.model_dump(include={
                     "start", "end", "max_symbols", "seed", "industry_policy", "industry_source", "auction_policy",
-                    "commission_bp", "slippage_bp", "data_profile"}),
+                    "commission_bp", "slippage_bp", "stamp_tax_bp", "data_profile"}),
                 "start": start, "end": end}
     key = digest(identity)
     target = cache_root / key
     if config.cache and target.exists():
-        meta = json.loads((target / "manifest.json").read_text())
+        meta = json.loads((target / "manifest.json").read_text(encoding='utf-8'))
         if meta["identity"] != identity:
             raise ValueError("Panel cache identity mismatch")
         for name, expected in meta["files"].items():

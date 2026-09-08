@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 dist/
 *.tsbuildinfo
 .env
@@ -23,3 +23,20 @@ data/industry_sws_daily/
 SERVER_RUNBOOK.md
 *_SERVER_RUNBOOK.md
 .local-ops/
+
+.venv-research/
+
+# Generated competition artifacts and one-off diagnostics.
+artifacts_competition/
+competition_run.log
+scratch_diagnose_*.py
+
+
+# LaTeX build intermediates.
+*.aux
+*.log
+*.out
+*.toc
+
+*.synctex.gz
+

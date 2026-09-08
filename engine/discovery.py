@@ -65,19 +65,25 @@ def orthogonalize(frame: pd.DataFrame, controls: list[str]) -> pd.DataFrame:
             x_test = np.column_stack([polynomial.transform(test_numeric), spline.transform(test_numeric)])
             train_blocks.append(csr_matrix(x_train))
             test_blocks.append(csr_matrix(x_test))
+        # 稠密矩阵转为 CSR 后及时释放，避免并行时保留双份大矩阵。
+        if numeric:
+            del x_train, x_test, train_numeric, test_numeric
         if categorical:
             encoder = OneHotEncoder(sparse_output=True, dtype=float, handle_unknown="ignore")
             train_blocks.append(encoder.fit_transform(frame.loc[train, categorical]))
             test_blocks.append(encoder.transform(frame.loc[test, categorical]))
         design_train = hstack(train_blocks, format="csr")
         design_test = hstack(test_blocks, format="csr")
+        del train_blocks, test_blocks
         if not np.isfinite(design_train.data).all() or not np.isfinite(design_test.data).all():
             raise ValueError("控制变量包含非有限值")
-        model = make_pipeline(StandardScaler(with_mean=False),
-                              Ridge(alpha=1.0, solver="lsqr", tol=1e-10))
+        model = make_pipeline(StandardScaler(with_mean=False, copy=False),
+                              Ridge(alpha=1.0, solver="lsqr", tol=1e-10, copy_X=False))
         model.fit(design_train, frame.loc[train, ["r", "f"]])
         residuals = frame.loc[test, ["r", "f"]].to_numpy() - model.predict(design_test)
         result.loc[test, ["r_resid", "f_resid"]] = residuals
+        # 每折设计仅使用一次，原地缩放和及时释放避免与下一折重叠驻留。
+        del design_train, design_test, model
     return result
 
 
@@ -250,42 +256,81 @@ def forest_propose(
             "internal_leaf_effects": leaf_effects, "reason": "候选不代表因果识别；不向提案岗位提供效应方向"}
 
 
+def evaluate_split(
+    train: pd.DataFrame, validation: pd.DataFrame, candidates: list[str],
+    cuts: dict[str, Any], config: ResearchConfig, horizon: int, index: int,
+) -> dict[str, Any]:
+    """评估单个时间切分，供串行和进程执行共用。
+
+    Args:
+        train: 已隔离验证日期的训练完整案例。
+        validation: 只含验证日期的完整案例。
+        candidates: 冻结候选变量名。
+        cuts: 冻结切点表。
+        config: 冻结配置，局部种子仅由切分序号决定。
+        horizon: 收益周期，单位为交易日。
+        index: 从零开始的切分序号。
+    Returns:
+        p 值、最强候选、进程号和耗时；不足日期时返回中性结果。
+    """
+    import os
+    import time
+
+    started = time.perf_counter()
+    local = config.model_copy(update={"seed": config.seed + index})
+    result = {"p": 1.0, "strongest": None, "pid": os.getpid(), "split": index}
+    if train.date.nunique() >= 800 and validation.date.nunique() >= 400:
+        print(f"discovery split {index + 1}/{config.n_splits}: "
+              f"{len(train)} train rows, pid={os.getpid()}", flush=True)
+        proposed = forest_propose(train, candidates, cuts, local)
+        print(f"discovery split {index + 1}/{config.n_splits}: forest ready", flush=True)
+        if proposed["candidates"]:
+            strongest = max(proposed["candidates"], key=lambda item: item["frequency"])["name"]
+            threshold = next(row["value"] for row in cuts.values() if row["field"] == strongest)
+            result.update(strongest=strongest,
+                          p=blade_icm(validation, strongest, threshold, horizon, local)["p"])
+    result["elapsed_seconds"] = time.perf_counter() - started
+    return result
+
+
 def repeat_splits(
-    panel: MarketPanel, signal: pd.DataFrame, candidates: list[str], cuts: dict[str, Any], config: ResearchConfig,
+    panel: MarketPanel, signal: pd.DataFrame, candidates: list[str], cuts: dict[str, Any], config: ResearchConfig, horizon: int = 5,
 ) -> dict[str, Any]:
     """仅在 A 段重复时间块训练/验证；返回 2×p 中位数与入选频率，不访问正式确认段。"""
-    frame = make_sample(panel, signal, 5, candidates)
+    frame = make_sample(panel, signal, horizon, candidates)
     dates = np.sort(frame.date.unique())
     votes = dict.fromkeys(candidates, 0)
     p_values = []
-    for index in range(config.n_splits):
-        fraction = 0.55 + 0.2 * index / max(1, config.n_splits - 1)
-        boundary = int(len(dates) * fraction)
-        train = frame[frame.date.isin(dates[:max(0, boundary - 15)])].reset_index(drop=True)
-        validation = frame[frame.date.isin(dates[boundary:])].reset_index(drop=True)
-        local = config.model_copy(update={"seed": config.seed + index})
-        if train.date.nunique() < 800 or validation.date.nunique() < 400:
-            p_values.append(1.0)
-            continue
-        print(f"discovery split {index + 1}/{config.n_splits}: {len(train)} train rows", flush=True)
-        proposed = forest_propose(train, candidates, cuts, local)
-        print(f"discovery split {index + 1}/{config.n_splits}: forest ready", flush=True)
-        if not proposed["candidates"]:
-            p_values.append(1.0)
-            continue
-        strongest = max(proposed["candidates"], key=lambda item: item["frequency"])["name"]
-        votes[strongest] += 1
-        threshold = next(row["value"] for row in cuts.values() if row["field"] == strongest)
-        p_values.append(blade_icm(validation, strongest, threshold, 5, local)["p"])
+    purge = max(15, horizon + 1)
+    lower, upper = 800 + purge, len(dates) - 400
+    if lower > upper:
+        return {"state": "UNDECIDABLE", "p_median": 1.0,
+                "selection_frequency": votes, "fold_p": [], "segment": "A_internal_only",
+                "reason": "insufficient dates for 800 training / 400 validation with purge"}
+    boundaries = np.linspace(lower, upper, config.n_splits).astype(int)
+    if config.mode == "fast" and config.workers > 1:
+        from engine.discovery_parallel import parallel_splits
+
+        outcomes = parallel_splits(frame, dates, boundaries, purge, candidates, cuts, config, horizon)
+    else:
+        outcomes = [evaluate_split(
+            frame[frame.date.isin(dates[:boundary - purge])].reset_index(drop=True),
+            frame[frame.date.isin(dates[boundary:])].reset_index(drop=True),
+            candidates, cuts, config, horizon, index,
+        ) for index, boundary in enumerate(boundaries)]
+    for outcome in outcomes:
+        p_values.append(outcome["p"])
+        if outcome["strongest"] is not None:
+            votes[outcome["strongest"]] += 1
     return {"p_median": min(1.0, 2 * float(np.median(p_values))),
             "selection_frequency": {key: value / config.n_splits for key, value in votes.items()},
-            "fold_p": p_values, "segment": "A_internal_only"}
+            "fold_p": p_values, "segment": "A_internal_only", "split_diagnostics": outcomes}
 
 
 def evolve_operators(structure: Any, results: list[dict[str, Any]], confirmed_conditions: list[str]) -> list[dict[str, Any]]:
     """根据断言矩阵提出演化动作；返回提案元数据，所有新组合仍需新 ID 和完整检验。"""
     output = []
-    if any(row["kind"] in ("shape", "sign") and row["state"] != "hold" for row in results):
+    if any(row["kind"] in ("shape", "sign") and row["state"] == "violated" for row in results):
         output.append({"operator": "horizontal", "parent": structure.id, "family": structure.family,
                        "forms": [form for form in (1, 3, 5) if form != structure.form]})
     if any(row["kind"] == "side" and row["state"] == "violated" for row in results):

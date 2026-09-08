@@ -9,16 +9,18 @@ TABLES = ["daily_bar", "trading_calendar", "instruments", "adj_factor", "suspens
           "st_flag", "dividend", "split", "open_auction", "yield_curve", "return_calibration"]
 
 
-def build():
+def build() -> Path:
+    """Build A-only views from physical Parquet; return warehouse path, excluding AppleDouble."""
     destination = ROOT / "artifacts" / "backtest" / "exploration.duckdb"
     destination.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(destination))
     created = []
     try:
+        con.execute("BEGIN TRANSACTION")
         for name in TABLES:
             base = ROOT / "data" / name
             paths = sorted(base.rglob("*.parquet")) if base.is_dir() else [base.with_suffix(".parquet")]
-            paths = [p for p in paths if not any(part.startswith("year=") and int(part[5:]) > 2022
+            paths = [p for p in paths if not p.name.startswith("._") and not any(part.startswith("year=") and int(part[5:]) > 2022
                                                for part in p.parts)]
             if not paths or not all(p.is_file() for p in paths):
                 raise ValueError("Missing data source: " + name)
@@ -33,7 +35,11 @@ def build():
         low, high = con.execute("SELECT min(date),max(date) FROM v_daily_bar").fetchone()
         if str(high)[:10] != "2022-06-30":
             raise ValueError("Unexpected A view date boundary")
+        con.execute("COMMIT")
         print("A-only warehouse:", low, high)
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
     finally:
         con.close()
     (destination.parent / "manifest.json").write_text(json.dumps(created, indent=2))

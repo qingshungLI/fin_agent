@@ -16,10 +16,11 @@ backtest = ["rqalpha==6.3.0", "duckdb>=1.4,<2"]
 bayes = ["pymc>=5.20,<5.21", "arviz>=0.20,<0.22", "matplotlib>=3.8,<3.11", "numpy<2"]
 
 [tool.setuptools.packages.find]
-include = ["engine*"]
+include = ["engine*", "research_sdk*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["backtest"]
 
 [tool.ruff]
 line-length = 100

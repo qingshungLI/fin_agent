@@ -2,7 +2,10 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from rqalpha_mod_local_rqdata.data_source import LocalRQDataSource
+LocalRQDataSource = pytest.importorskip(
+    "rqalpha_mod_local_rqdata.data_source",
+    reason="RQAlpha local backtest adapter is optional; install project backtest extras to run adapter tests",
+).LocalRQDataSource
 
 
 def test_missing_suspension_is_not_silently_tradable():

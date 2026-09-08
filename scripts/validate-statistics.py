@@ -59,6 +59,7 @@ def main():
     assert before=={p.name:file_hash(p) for p in sources}
     report["code_sha256"]=before
     report["uses_market_data"]=False
+    Path("artifacts/validation").mkdir(parents=True, exist_ok=True)
     Path("artifacts/validation/statistics-batch-revised.json").write_text(json.dumps(report,indent=2))
     print(report, flush=True)
 

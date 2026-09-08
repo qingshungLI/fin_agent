@@ -1,6 +1,43 @@
-# AutoAlpha Harness
+# AURORA Alpha Harness
+> Official name: **AURORA Alpha Harness** (Auditable Unified Recursive Optimization and Research Architecture). RSI means Recursive Self-Improvement, not Relative Strength Index.
 
-**当前验收与未完成项见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。设计目标不代表已取得正式因子结论。**
+三维研究控制台已接入真实批次：参见 [CONTROL_PANEL.md](CONTROL_PANEL.md)，包含启动方式、评委演示路径与数据边界。
+
+## 2026-09-08：全网格研究入口与新增字段
+
+当前实现已将原先的灰格构造为可搜索代理，初始队列为 **70 格**。这是可尝试的研究坐标数，不是有效因子数。每格生成一份机制提案和三个收敛表达式；登记拒绝、功效不足和检验无效均作为结果记录，不授予 PASS。
+
+```powershell
+.\.venv-research\Scripts\python.exe -u run_engine.py --full-grid --max-symbols 0 --workers 4 --industry-policy quarantine --auction-policy quarantine --data-profile full --run-id fullcycle-20260908
+.\.venv-research\Scripts\python.exe scripts/summarize_research.py artifacts/fullcycle-20260908
+```
+
+`--full-grid` 默认开启自动演化、条件发现和贝叶斯记忆：70 格初始覆盖额度加 140 次演化额度，总尝试上限 210，模型调用预算 4200。调度器保留全部初始格的尝试额度，子结构不会挤掉未访问格。`--evolution-budget` 可调整额外额度，`--no-auto-evolve` 则只保留初始网格。未触发有效后续假设时，队列可能早于额度耗尽；额度不是保证的产出数。`manual` 仅支持四个种子。引擎和工作台单批次上限为 1000 次尝试。
+
+自动演化包括形状变化、竞争机制、森林发现条件和跨机制条件组合。必要前提包括有效安慰剂结果及明确的断言/条件发现证据；未检验不当作被证伪。子代只接收事前规格和研究问题，重新冻结表达式与断言，最大深度为 2。每五个结构更新研究记忆和探索方向。测量结果先提交检查点，归纳阶段失败可恢复，避免重复测量。
+
+同批次原命令重跑即恢复；`--continue-from 父批次ID` 在新批次继承已验证结果、队列和记忆，要求相同代码、数据、运行环境及统计口径。继承结果单独计数，不是独立重复，也不自动获得新批次确认资格。
+
+本次使用项目隔离环境 `.venv-research`（Python 3.11.9），安装研究、测试、贝叶斯与 RQAlpha 全部依赖。完整配置是 1000 次 bootstrap、500 次安慰剂、500 棵树、20 次切分、全部 5562 只股票和 1458 个交易日。`quarantine` 仅隔离异常来源，仍会阻止正式确认，不能据此称为正式合格因子。
+
+完整运行顺序和结果入口见 [RUN_PIPELINE.md](RUN_PIPELINE.md)。
+
+| 机制 | 已接入的构造 | 解释范围 |
+|---|---|---|
+| M4 信息扩散水平 | 滞后一日行业收益减个股收益，及其排序/标准化/平滑 | 行业相对反应差，不直接证明信息传播 |
+| M5 交易约束 | 当日收益相对实际涨跌停带宽的位置、距涨停距离、压力阈值事件 | 用连续强度替代二元状态作为主信号 |
+| M6 指数观察 | 三个宽基指数完整权重快照的最近已知权重、观察变化、快照事件 | 快照次交易日起可观察；不是真实调仓生效日或实时资金流 |
+| M7 参与者结构事件 | 平均单笔成交额绝对时序标准分超过 3 | 观测到的成交结构冲击，不识别真实投资者身份 |
+| M8 风险与估值 | 滞后一日的正 PB/PE 倒数、波动风险代理、风险冲击事件 | 仅检验 1/3/5/10 日短期重定价，不推断长期风险溢价 |
+| M9 不确定性代理 | 20 日波动水平、相对既往波动均值的变化、波动下降阈值事件 | 可观察量价代理，不证明真实信息不确定性已消除 |
+
+原始 Parquet 不修改。派生逻辑位于 `engine/research_fields.py`，源码哈希进入面板缓存身份。指数快照不向过去回填，超过 45 个日历日不再沿用；完整权重和在 0.98–1.02 范围内才允许把未列入快照的证券权重视为零。比率无效、暖启动不足和缺失值保留 NaN。
+
+工程模式使用 150 次安慰剂、200 次 bootstrap；正式模式门槛保持原值。IAAFT 保留 30 轮迭代：出现不合格替代样本时标记 `untested`，停止该项而不将它解读成因子反证。每一检验阶段输出进度。Windows 使用系统文件锁，退出时自动释放，不需要删除残留锁文件。
+
+原设计文档中的“52 格可行、18 格灰格”保留为设计历史；当前可执行坐标以 `build_map()` 的结果为准。
+
+**最新运行记录见 [RUN_PIPELINE.md](RUN_PIPELINE.md)，原实现审计见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。设计目标不代表已取得正式因子结论。**
 
 **一个用证伪压力驱动的自动化因子研究系统。**
 
@@ -462,3 +499,19 @@ src/schema.ts       前端与 Python 产物共享的 TypeScript 契约
 当前后端由 Python `engine/` 负责：数据校验、PIT 状态和复权、注册因子、IC/TB/HAC、影响分解、结构化 JSON/Parquet 产出。TypeScript `src/schema.ts` 只定义前后端共享契约，未来前端直接消费引擎产物。真实引擎默认拒绝未经核验的口径，不会用合成数据结果替代真实结论。
 
 运行方式：`python run_engine.py --data-root D:\\finance_agent\\data --output-root artifacts`。正式运行会读取真实 Parquet；复权方向、状态表、PIT 行业任一校验失败都会终止。当前单结构命令只负责真实测量和产出，B/H 正式确认、森林和层次模型在各自依赖通过统计验收后接入，不会把未实现部分伪装成 PASS。
+
+## 多结构组合研究与控制台（2026-09-08）
+
+`composition/` 已实现并联、冲突空仓、至少两结构同向三种组合 gate，保留源覆盖与原持仓周期、处理重复定义、输出逐日路由与成分贡献，并独立计算净额合并后的成本。可在单结构研究运行期间读取已提交快照；详细入口、产物与真实结果见 [COMPOSITION.md](COMPOSITION.md)。
+
+当前 6 结构组合的三套完整研究产物已生成，均为研究结果，尚未正式确认。真实执行回放发现原始竞价开盘数据缺失，失败证据保留，不等同于成交验收通过。控制台新增“组合门控”页，展示成分、规则、仓位、成本、收益估计和最新执行状态；启动说明见 [CONTROL_PANEL.md](CONTROL_PANEL.md)。
+## Fast 演化优先模式
+
+使用 `run_engine.py --fast --full-grid` 可保留完整 A 段与全股票范围，将前段检验缩减为探索诊断，并优先推进子结构演化、组合与回测。完整配置继续保留；fast 不取得正式 PASS。参数对比、当前批次和恢复说明见 [FAST_RESEARCH.md](FAST_RESEARCH.md)。 `--workers 2` 开启按时间切分的多进程发现，按可用内存限制并发；`--workers 1` 可串行复核。两种方式使用相同日期、候选、切点与随机种子。
+## 企业自助研究工作室
+
+评委和企业用户可通过 `#studio` 进入自有数据工作室：上传 CSV/Parquet、编辑研究格子、选择 fast/balanced、运行一代可复现演化，并按验证 IC、同暴露超额、双倍成本、验证子区间和候选相似度审查因子。后端提供 `research_sdk`、CLI 和 `/api/studio/*` 接口；详细演示和产品化边界见 [ENTERPRISE_READINESS.md](ENTERPRISE_READINESS.md)，AI 编排规则见 [skills/factor-research/SKILL.md](skills/factor-research/SKILL.md)。
+
+## 统一叙事：RSI Alpha Research Harness
+
+RSI 在本项目中指 Recursive Self-Improvement。AI 不是直接输出一个神奇因子，而是在固定评估器和有限预算内完成“提出—编译—测量—批评—变异—记录”，让下一代研究假设继承可审查证据。金融技术指标只是一个可选 seed。详见 [RSI_ALPHA_HARNESS.md](RSI_ALPHA_HARNESS.md)。

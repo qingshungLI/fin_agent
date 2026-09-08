@@ -17,7 +17,7 @@ class ExecutionConfig:
     holding_days: int = 5
     commission_bp: float = 3.0
     slippage_bp: float = 5.0
-    stamp_tax_bp: float = 5.0
+    stamp_tax_bp: float = 10.0
     initial_cash: float = 1_000_000.0
     round_lot: int = 100
 

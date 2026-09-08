@@ -6,15 +6,45 @@ from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
-import rqalpha
-from rqalpha.api import order_target_percent, update_universe, subscribe_event
-from rqalpha.core.events import EVENT
-from rqalpha.const import ORDER_STATUS
 
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def active_symbols(chosen: pd.Series, positions: object) -> list[str]:
+    """Select desired or actually held names without touching future IPO instruments.
+
+    Args:
+        chosen: Previous-close nonnegative desired weights.
+        positions: RQAlpha position mapping; iteration only visits existing records.
+    Returns:
+        list[str]: Sorted union; zero-target never-held symbols are not queried.
+    """
+    held = {symbol for symbol in positions if positions[symbol].quantity > 0}
+    return sorted(set(chosen[chosen > 0].index) | held)
+
+
 def run_target(target, output, initial_cash=1_000_000., holding_days=5):
+    """Execute a validated target matrix through the optional RQAlpha adapter.
+
+    Args:
+        target: Chronological nonnegative target weights indexed by trading date.
+        output: Empty directory receiving execution artifacts.
+        initial_cash: Starting cash in the simulated account.
+        holding_days: Rebalance interval measured in trading sessions.
+    Returns:
+        dict: Execution report written alongside the simulator artifacts.
+    Raises:
+        ModuleNotFoundError: If the optional RQAlpha backtest stack is unavailable.
+    """
+    try:
+        import rqalpha
+        from rqalpha.api import order_target_percent, subscribe_event, update_universe
+        from rqalpha.const import ORDER_STATUS
+        from rqalpha.core.events import EVENT
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "RQAlpha backtest extras are required for run_target; install the project backtest extra"
+        ) from exc
     if target.empty or not isinstance(target.index,pd.DatetimeIndex):
         raise ValueError("Nonempty dated targets required")
     if target.index.has_duplicates or not target.index.is_monotonic_increasing:
@@ -32,8 +62,17 @@ def run_target(target, output, initial_cash=1_000_000., holding_days=5):
     def on_rejection(event):
         raise RuntimeError("RQAlpha rejected an execution order")
     def init(context):
-        update_universe(target.columns.tolist())
+        update_universe([])
         subscribe_event(EVENT.ORDER_CREATION_REJECT,on_rejection)
+    def before_trading(context):
+        """Subscribe only current targets and holdings; the input context is pre-open."""
+        day = pd.Timestamp(context.now.date())
+        if day not in target.index:
+            raise RuntimeError("Missing target calendar day")
+        index = target.index.get_loc(day)
+        chosen = target.iloc[max(0, index-1)].fillna(0.) if index else target.iloc[0]*0
+        update_universe(active_symbols(chosen, context.portfolio.positions))
+
     def open_auction(context,bars):
         day=pd.Timestamp(context.now.date())
         if day not in target.index:
@@ -47,11 +86,12 @@ def run_target(target, output, initial_cash=1_000_000., holding_days=5):
         chosen=target.iloc[index-1].fillna(0.)
         signal_dates.append({"execution_date":str(day.date()),"signal_date":str(signal_day.date())})
         # Sell reductions first, leaving the fixed cash reserve for costs.
+        needed = active_symbols(chosen, context.portfolio.positions)
         current={symbol:float(context.portfolio.positions[symbol].market_value)/
-                 context.portfolio.total_value for symbol in target.columns}
-        symbols=sorted(target.columns,key=lambda s:(chosen[s]-current[s],s))
+                 context.portfolio.total_value for symbol in needed}
+        symbols=sorted(needed,key=lambda s:(chosen.get(s, 0.)-current[s],s))
         for symbol in symbols:
-            desired=float(chosen[symbol])
+            desired=float(chosen.get(symbol, 0.))
             price=float(bars[symbol].open)
             delta=abs(desired-current[symbol])*context.portfolio.total_value
             if delta==0: continue
@@ -71,6 +111,7 @@ def run_target(target, output, initial_cash=1_000_000., holding_days=5):
                       "filled":o.filled_quantity,"reason":o.message} for o in unresolved]
             (output/"unfilled-orders.json").write_text(json.dumps(details,indent=2))
             raise RuntimeError("Partial, cancelled or unfilled order invalidates this execution run")
+        orders.clear()
         daily.append({"date":str(context.now.date()),"cash":float(context.portfolio.cash),
                       "total_value":float(context.portfolio.total_value)})
     config={
@@ -87,7 +128,7 @@ def run_target(target, output, initial_cash=1_000_000., holding_days=5):
                                "output_file":str(output/"result.pkl")}}}
     (output/"config.json").write_text(json.dumps(config,indent=2))
     try:
-        result=rqalpha.run_func(config=config,init=init,open_auction=open_auction,after_trading=after_trading)
+        result=rqalpha.run_func(config=config,init=init,before_trading=before_trading,open_auction=open_auction,after_trading=after_trading)
         if result is None or "sys_analyser" not in result: raise RuntimeError("RQAlpha produced no result")
         trades=result["sys_analyser"]["trades"]
         trades.to_parquet(output/"trades.parquet")

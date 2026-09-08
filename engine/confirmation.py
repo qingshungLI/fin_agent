@@ -37,7 +37,7 @@ def confirm_once(config, run_id, ids, data_root=Path("data"), output_root=Path("
     folder = root / run_id
     store = AuditStore(ROOT / "artifacts")
     with project_lock(ROOT / "artifacts"):
-        state = json.loads((folder / "checkpoint.json").read_text())
+        state = json.loads((folder / "checkpoint.json").read_text(encoding='utf-8'))
         if state["status"] != "COMPLETED" or state["identity"]["config"] != config.model_dump():
             raise ValueError("Only a completed unchanged exploratory run can be confirmed")
         from engine.cache import file_hash
@@ -54,20 +54,20 @@ def confirm_once(config, run_id, ids, data_root=Path("data"), output_root=Path("
             if file_hash(folder / relative) != expected:
                 raise ValueError("Research artifact changed; B/H remains unread")
         calibration = ROOT / "artifacts" / "validation" / "calibration.json"
-        if not calibration.exists() or not json.loads(calibration.read_text()).get("passed"):
+        if not calibration.exists() or not json.loads(calibration.read_text(encoding='utf-8')).get("passed"):
             raise ValueError("Statistical simulation gate not passed; B/H remains unread")
-        validation = json.loads(calibration.read_text())
+        validation = json.loads(calibration.read_text(encoding='utf-8'))
         if any(file_hash(ROOT / "engine" / name) != expected
                for name, expected in validation.get("code_sha256", {}).items()) or not validation.get("code_sha256"):
             raise ValueError("Calibration does not match current inference code; B/H remains unread")
-        quality = json.loads((folder / "data-quality.json").read_text())
-        rows = [json.loads((folder / sid / "result.json").read_text()) for sid in ids]
+        quality = json.loads((folder / "data-quality.json").read_text(encoding='utf-8'))
+        rows = [json.loads((folder / sid / "result.json").read_text(encoding='utf-8')) for sid in ids]
         for row in rows:
             check = eligibility(row, config, quality)
             if not check["eligible"]:
                 raise ValueError(f"Not eligible: {row['id']}: {check['reasons']}; B/H remains unread")
         if segment == "H":
-            previous = json.loads((folder / "confirmation-B.json").read_text())
+            previous = json.loads((folder / "confirmation-B.json").read_text(encoding='utf-8'))
             passing = {r["id"] for r in previous if r["formal"] and r["verdict"] == "PASS"}
             if not set(ids) <= passing:
                 raise ValueError("Holdout requires B-confirmed structures")
@@ -80,7 +80,7 @@ def confirm_once(config, run_id, ids, data_root=Path("data"), output_root=Path("
             panel = build_panel(data_root, config, start=start, end=end)
             if any(r.get("formal_eligible") is False or r["status"] == "fail" for r in panel.report):
                 raise ValueError("Confirmation data gate failed")
-            cuts = json.loads((folder / "cuts.json").read_text())
+            cuts = json.loads((folder / "cuts.json").read_text(encoding='utf-8'))
             results = []
             for row in rows:
                 structure = Structure.model_validate(row["structure"])
@@ -90,7 +90,8 @@ def confirm_once(config, run_id, ids, data_root=Path("data"), output_root=Path("
                 assertions = blade_assertion(structure, panel, stored, config)
                 p = max(primary["p"], *(a["p_support"] for a in assertions))
                 interaction = None
-                if structure.lineage.get("origin") == "forest":
+                if (structure.lineage.get("origin") == "forest"
+                        or structure.lineage.get("search_condition")):
                     moderator = structure.lineage["moderator"]
                     cut = cuts[structure.lineage["cut_id"]]["value"]
                     sample = make_sample(panel, stored.get("ungated_signal", stored["signal_0"]), structure.primary_horizon, [moderator])

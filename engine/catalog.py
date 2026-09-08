@@ -26,8 +26,6 @@ FAMILIES = [
 ]
 FORMS = ["水平", "变化", "时序相对", "截面相对", "背离", "条件化", "事件化"]
 FORM_CODES = ["F1_level", "F2_change", "F3_ts_relative", "F4_xs_relative", "F5_divergence", "F6_conditional", "F7_event"]
-INFEASIBLE = {"M4": [1], "M5": [1, 2, 3, 4, 5], "M6": [1, 3, 5],
-              "M7": [7], "M8": [2, 5, 7], "M9": [1, 2, 3, 4, 5]}
 SEEDS = [("M2", 3), ("M2", 1), ("M1", 3), ("M1", 1)]
 
 
@@ -87,8 +85,9 @@ class Structure(BaseModel):
         for slot, value in self.labels.items():
             if value not in vocabulary_registry(slot):
                 raise ValueError(f"未登记词表: {slot}={value}")
-        if self.form in INFEASIBLE.get(self.family, []):
-            raise ValueError("该机制/表现形式已被登记为不可行")
+        cell = next(c for c in build_map() if c["family"] == self.family and c["form"] == self.form)
+        if cell["status"] != "unexplored":
+            raise ValueError("该格暂不可执行: " + cell["reason"])
         if self.labels["form"] != FORM_CODES[self.form - 1]:
             raise ValueError("Representation label disagrees with map coordinate")
         if len(set(self.operational)) != 3:
@@ -115,16 +114,23 @@ def vocabulary_registry(slot: str) -> list[str]:
 
 
 def build_map() -> list[dict[str, Any]]:
-    """生成 70 格机制地图；无参数，返回带不可行原因及周期暂缓状态的格子。"""
+    """生成带逐格执行边界的机制地图。
+
+    Returns:
+        list[dict[str, Any]]: 70 格的状态和原因；假设首版只有 1/3/5/10 日标签。
+    """
     result = []
     for row in FAMILIES:
         for form in range(1, 8):
-            blocked = form in INFEASIBLE.get(row[0], [])
+            status = "unexplored"
+            reason = "已接入派生字段及形式构造，等待事前提案登记和数据有效性校验"
+            if row[0] == "M6":
+                reason = "基于最近已知指数快照的观察关系，不解释为真实调仓日资金流"
+            elif row[0] == "M8":
+                reason = "估值和波动风险暴露的 1/3/5/10 日重定价代理，不检验长期风险溢价"
             result.append({"id": f"{row[0]}-F{form}", "family": row[0], "family_name": row[1],
                            "form": form, "form_name": FORMS[form - 1],
-                           "status": "infeasible" if blocked else "deferred_horizon" if row[0] == "M8" else "unexplored",
-                           "reason": "状态/事件不能直接作为连续信号，或构造共线" if blocked else
-                           "机制周期超过首版 10 日范围" if row[0] == "M8" else "尚未登记研究"})
+                           "status": status, "reason": reason})
     return result
 
 

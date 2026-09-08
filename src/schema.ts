@@ -1,6 +1,6 @@
 /** 前后端契约：所有研究结果来自冻结 JSON；前端不执行统计计算。 */
 export type Verdict = 'PASS' | 'FAIL' | 'UNDECIDABLE';
-export type CellStatus = 'unexplored' | 'infeasible' | 'deferred_horizon';
+export type CellStatus = 'unexplored' | 'infeasible' | 'deferred_horizon' | 'deferred_data' | 'deferred_implementation';
 export interface MapCell { id: string; family: string; family_name: string; form: number; form_name: string; status: CellStatus; reason: string }
 export interface Curve { expression: number; horizon: number; mean: number | null; se: number | null; n_eff: number | null; mde: number | null; t: number | null; p: number; tb: number | null; raw_ic: number | null; groups: number[] }
 export interface AssertionResult { id: string; kind: string; subject: string; state: 'hold' | 'violated' | 'untested'; detail: unknown; attribution: string }

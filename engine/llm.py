@@ -37,7 +37,7 @@ class DeepSeek:
     def __init__(self, root: Path, env_file: Path = Path(".env"), max_calls: int = 100):
         values = {}
         if env_file.exists():
-            for line in env_file.read_text().splitlines():
+            for line in env_file.read_text(encoding='utf-8').splitlines():
                 if "=" in line and not line.lstrip().startswith("#"):
                     key, value = line.split("=", 1)
                     values[key.strip()] = value.strip().strip('"').strip("'")
@@ -72,7 +72,7 @@ class DeepSeek:
                     "model": model, "thinking": reasoning, "nonce": nonce, "version": 3}
         path = self.root / (digest(identity) + ".json")
         if path.exists():
-            cached = json.loads(path.read_text())
+            cached = json.loads(path.read_text(encoding='utf-8'))
             if cached["identity"] != identity:
                 raise ValueError("LLM cache identity mismatch")
             return cached["result"]
@@ -91,6 +91,7 @@ class DeepSeek:
             "max_tokens": 12000 if reasoning else 4096}
         if reasoning:
             body["reasoning_effort"] = "high"
+        print(f"llm {role}: request {self.calls}/{self.max_calls}", flush=True)
         error = "unknown"
         for attempt in range(3):
             try:
@@ -112,6 +113,7 @@ class DeepSeek:
                 result = json.loads(choice["message"]["content"])
                 write_json(path, {"identity": identity, "result": result,
                                   "usage": payload.get("usage", {}), "timestamp": now()})
+                print(f"llm {role}: response cached", flush=True)
                 return result
             except (httpx.HTTPError, ValueError, KeyError) as exc:
                 error = type(exc).__name__
@@ -242,6 +244,7 @@ class DeepSeek:
         lineage = {k:v for k,v in hint.items() if k != "parent_specification"}
         lineage.update(parent=hint.get("parent"), operator=operator,
                        origin="forest" if operator == "forest" else "llm_prior",
+                       search_condition=operator in {"forest", "crossover"},
                        operational_plan=compiled["plan"], event_expression=compiled["event_expression"])
         if condition:
             lineage.update(moderator=condition, cut_id=plan.cut_id,

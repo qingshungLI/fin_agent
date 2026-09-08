@@ -340,10 +340,29 @@ def build_panel(
     for name in ["market_cap", "amihud", "realized_vol", "auction_spread", "turnover_today", "avg_trade_size"]:
         if name in fields:
             fields[name + "_pct"] = fields[name].where(fields["in_pool"]).rank(axis=1, pct=True) * 100
+    from engine.research_fields import market_proxy_fields, observed_index_fields
+
+    valuation = read_source(root, "valuation", warmup, end,
+                            ["order_book_id", "date", "pb_ratio_lf", "pe_ratio_ttm"],
+                            symbols, manifest=manifest)
+    require_unique(valuation, ["order_book_id", "date"], "valuation proxies")
+    for name in ["pb_ratio_lf", "pe_ratio_ttm"]:
+        fields[name] = valuation.pivot(index="date", columns="order_book_id", values=name).reindex(
+            index=dates, columns=symbols)
+    fields.update(market_proxy_fields(fields))
+    snapshots = {
+        index: read_source(root, f"index_weights_{index}", warmup, end,
+                           ["order_book_id", "snapshot_date", "weight"],
+                           date_column="snapshot_date", manifest=manifest)
+        for index in ["000300_XSHG", "000905_XSHG", "000852_XSHG"]
+    }
+    fields.update(observed_index_fields(snapshots, dates, pd.Index(symbols)))
+    report.append({"name": "扩展机制代理字段", "status": "pass", "count": 11,
+                   "detail": "指数为下一交易日起的最近已知快照；估值滞后一日；不确定性为量价代理。M8仅检验短期重定价，不推断长期风险溢价。"})
     labels = build_labels(fields)
     for name, values in list(labels.items()):
         if name.startswith("raw_"):
-            labels[name.replace("raw_", "net_")] = values - (2 * config.commission_bp + 2 * config.slippage_bp + 10) / 10000
+            labels[name.replace("raw_", "net_")] = values - (2 * config.commission_bp + 2 * config.slippage_bp + config.stamp_tax_bp) / 10000
     # 暖启动行只供特征计算，标签与最终暴露面板都裁到授权研究区间。
     selection = (dates >= start) & (dates <= end)
     fields = {key: value.loc[selection] for key, value in fields.items()}

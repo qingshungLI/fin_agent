@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('real server workbench renders research evidence and opens measurement', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('http://127.0.0.1:5173');
+  await page.goto('http://127.0.0.1:5173/#workbench');
   await expect(page.getByRole('heading', { name: 'AutoAlpha 因子研究工作台' })).toBeVisible();
   await expect(page.getByText('尚无研究批次')).toHaveCount(0);
   await expect(page.locator('.map-cell')).toHaveCount(70);
@@ -32,7 +32,7 @@ test('real server workbench renders research evidence and opens measurement', as
 
 test('workbench submits a bounded real server research job', async ({ page }) => {
   test.skip(process.env.RUN_LIVE_RESEARCH !== '1', 'Explicit live API budget required');
-  await page.goto('http://127.0.0.1:5173');
+  await page.goto('http://127.0.0.1:5173/#workbench');
   await page.getByLabel('想法来源').selectOption('llm');
   await page.getByLabel('股票数量').fill('600');
   await page.getByLabel('结构数量').fill('1');
@@ -47,7 +47,7 @@ test('workbench submits a bounded real server research job', async ({ page }) =>
 test('workbench keeps a usable view during a server error', async ({ page }) => {
   await page.route('**/api/overview', route => route.fulfill({
     status:500, contentType:'application/json', body:JSON.stringify({detail:'temporary error'})}));
-  await page.goto('http://127.0.0.1:5173');
+  await page.goto('http://127.0.0.1:5173/#workbench');
   await expect(page.getByRole('alert')).toContainText('研究服务暂时不可用');
   await expect(page.getByRole('heading', { name:'AutoAlpha 因子研究工作台' })).toBeVisible();
 });

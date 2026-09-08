@@ -30,3 +30,20 @@ def test_api_submission_validation_and_single_writer(monkeypatch):
         raise RuntimeError("Another research writer is running")
     monkeypatch.setattr(server_jobs, "launch", busy)
     assert client.post("/api/jobs", json={}).status_code == 409
+
+
+def test_process_liveness_never_terminates_worker():
+    """Check live and exited child PIDs; the liveness probe must not kill the child."""
+    import subprocess
+    import sys
+    from server_jobs import process_alive
+    child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"],
+                             stdin=subprocess.PIPE)
+    try:
+        assert process_alive(child.pid)
+        assert child.poll() is None
+    finally:
+        child.communicate(timeout=10)
+    assert not process_alive(child.pid)
+    assert not process_alive(None)
+    assert RunRequest(full_grid=True, max_structures=210).full_grid

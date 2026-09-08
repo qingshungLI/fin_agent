@@ -1,0 +1,42 @@
+/** 企业用户闭环验收：真实行情 CSV 上传、自定义格子、后台运行、演化结果与导出。 */
+import { test, expect } from '@playwright/test';
+
+test('user uploads real data, configures a custom cell and exports completed research', async ({ page }) => {
+  test.setTimeout(90000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 1050 });
+  await page.goto('http://127.0.0.1:5173/#studio');
+  await expect(page.getByRole('heading', { name: '让研究从你的数据开始' })).toBeVisible();
+  await expect(page.locator('.s-rsi-banner')).toContainText('PROPOSE');
+  await expect(page.locator('.s-rsi-banner')).toContainText('有限预算');
+  await page.getByLabel('选择数据文件').setInputFiles('artifacts/validation/studio-real-panel.csv');
+  await page.getByRole('button', { name: '校验并导入', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('7,800 行');
+  await page.screenshot({ path: 'artifacts/validation/studio-data.png', fullPage: true });
+  await page.getByRole('button', { name: '开始研究设计' }).click();
+  await page.getByLabel('研究名称', { exact: true }).fill('真实行情 · 企业自助验收');
+  await page.getByRole('button', { name: '添加格子' }).click();
+  await page.getByLabel('格子名称', { exact: true }).last().fill('自定义三日反转');
+  await page.getByLabel('机制假设', { exact: true }).last().fill('历史三日收益冲击后的修正');
+  await page.getByRole('textbox', { name: '因子表达式', exact: true }).last().fill('neg(ts_mean(ret_1d, 3))');
+  await page.screenshot({ path: 'artifacts/validation/studio-design.png', fullPage: true });
+  await page.getByRole('button', { name: '冻结并启动研究' }).click();
+  await expect(page.locator('.s-table-wrap tbody tr')).toHaveCount(8, { timeout: 60000 });
+  await expect(page.locator('.s-report-bar')).toContainText('已完成');
+  await expect(page.getByRole('img', { name: '验证期成本后研究净值曲线' })).toBeVisible();
+  await expect(page.locator('.s-table-wrap')).toContainText('父结构');
+  await expect(page.locator('.s-table-wrap')).toContainText('训练段选定');
+  const href = await page.getByRole('link', { name: '因子目录', exact: true }).getAttribute('href');
+  const response = await page.request.get('http://127.0.0.1:5173' + href);
+  expect(response.ok()).toBeTruthy();
+  expect(await response.text()).toContain('validation_ic');
+  await page.screenshot({ path: 'artifacts/validation/studio-results.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.screenshot({ path: 'artifacts/validation/studio-mobile.png', fullPage: true });
+  await page.getByRole('button', { name: 'AI / 研究编排' }).click();
+  await expect(page.locator('.s-rsi-banner')).toContainText('RECORD');
+  await expect(page.getByRole('heading', { name: '一份 DataFrame 即可启动' })).toBeVisible();
+  expect(errors).toEqual([]);
+});

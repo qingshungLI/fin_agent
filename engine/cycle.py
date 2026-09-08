@@ -18,6 +18,7 @@ class ProposalTask(BaseModel):
     operator: Literal["seed", "horizontal", "cross_family", "forest", "crossover", "probe"] = "seed"
     parent: str | None = None
     moderator: str | None = None
+    donor: str | None = None
     depth: int = Field(default=0, ge=0, le=2)
 
     @property
@@ -40,16 +41,16 @@ def initial_tasks() -> list[ProposalTask]:
 
 
 def followup_tasks(row: dict[str, Any], history: list[dict[str, Any]],
-                   maximum_depth: int = 2) -> dict[str, Any]:
+                   maximum_depth: int = 2, *, exploratory: bool = False) -> dict[str, Any]:
     """Generate bounded new hypotheses, preserving untested versus contradicted."""
     structure = row["structure"]
     depth = int(structure["lineage"].get("depth", 0))
-    if row["blades"]["placebo"]["state"] != "pass":
+    if row["blades"]["placebo"]["state"] != "pass" and not exploratory:
         return {"tasks": [], "stop": "artifact gate; no mechanism revision"}
     if depth >= maximum_depth:
         return {"tasks": [], "stop": "frozen lineage depth budget exhausted"}
     power = row.get("power") or {}
-    if power.get("main_mde", 1) > 0.05:
+    if power.get("main_mde", 1) > 0.05 and not exploratory:
         return {"tasks": [], "stop": "insufficient power; reopen with more independent dates"}
     family, form = structure["family"], structure["form"]
     available = {(c["family"], c["form"]) for c in build_map() if c["status"] == "unexplored"}
@@ -80,7 +81,30 @@ def followup_tasks(row: dict[str, Any], history: list[dict[str, Any]],
         if names:
             tasks.append(ProposalTask(family=family, form=6, operator="forest",
                                       parent=row["id"], moderator=names[0], depth=depth + 1))
-    return {"tasks": [t.model_dump() for t in tasks[:1]],
+    if not tasks and (family, 6) in available:
+        for donor in history:
+            donor_spec = donor["structure"]
+            moderator = donor_spec.get("lineage", {}).get("moderator")
+            if (donor["id"] == row["id"] or donor["family"] == family or not moderator
+                    or donor["blades"]["placebo"]["state"] != "pass"
+                    or donor.get("verdict") == "FAIL"):
+                continue
+            supported = any(a["kind"] == "side" and a.get("subject") == moderator
+                            and a["state"] == "hold" for a in donor["blades"]["assertions"])
+            if supported:
+                tasks.append(ProposalTask(family=family, form=6, operator="crossover",
+                                          parent=row["id"], donor=donor["id"],
+                                          moderator=moderator, depth=depth + 1))
+                break
+    if not tasks and exploratory:
+        # Fast children are proposed hypotheses, never evidence for a mechanism law.
+        tried = {r["form"] for r in history if r["family"] == family}
+        candidate = next((f for f in (1, 3, 5, 2, 4, 6, 7)
+                          if f not in tried and (family, f) in available), None)
+        if candidate:
+            tasks.append(ProposalTask(family=family, form=candidate, operator="horizontal",
+                                      parent=row["id"], depth=depth + 1))
+    return {"exploratory": exploratory, "tasks": [t.model_dump() for t in tasks[:1]],
             "stop": None if tasks else "no resolved actionable direction; no speculative child"}
 
 

@@ -1,107 +1,68 @@
-/** 工作台 UI 管线：读取后端产物，展示地图覆盖、数据质量、统计功效、结构断言和审计链。 */
-import { useEffect, useState } from 'react';
+/**
+ * AURORA project console: polls research artifacts, controls a local checkpoint,
+ * exposes the full factor map/evidence/composition views, and links the reusable Skill.
+ */
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, ArrowRight, CheckCircle2, CircleAlert, Database, LockKeyhole, ShieldCheck } from 'lucide-react';
-import type { Audit, Overview, Structure } from './schema';
-import './styles.css';
+import { Activity, Box, Download, Expand, FileCode2, FileCheck2, GitBranch, Grid2X2, LoaderCircle, Pause, Play, RotateCcw, Search, Square, Terminal } from 'lucide-react';
+import type { CompositionReport, Result, Run, Snapshot } from './control-types';
+import './control.css';
+const ResearchScene = lazy(() => import('./ResearchScene'));
+const CompositionView = lazy(() => import('./CompositionView'));
+const SkillPanel = lazy(() => import('./SkillPanel'));
+const Studio = lazy(() => import('./Studio'));
+const Workbench = lazy(() => import('./Workbench'));
 
-const fallback: Overview = { status: 'LOADING', map: [] };
-function App() {
-  const [overview, setOverview] = useState<Overview>(fallback);
-  const [structures, setStructures] = useState<Structure[]>([]);
-  const [audit, setAudit] = useState<Audit | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [details, setDetails] = useState(false);
-  const [error, setError] = useState('');
-  const [launchState, setLaunchState] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [jobs, setJobs] = useState<{id:string;status:string}[]>([]);
-  async function launchRun(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setSubmitting(true); setLaunchState('正在提交到服务器…');
-    try {
-      const response = await fetch('/api/jobs', {method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({provider:form.get('provider'),max_symbols:Number(form.get('symbols')),
-          max_structures:Number(form.get('structures')),workers:4,
-          data_profile:form.get('dataProfile'),discovery:form.get('discovery') === 'on',bayes:form.get('bayes') === 'on',
-          engineering:form.get('mode') === 'engineering',industry_policy:form.get('policy'), industry_source:form.get('industrySource'),
-          auction_policy:form.get('auctionPolicy') === 'inherit' ? null : form.get('auctionPolicy')})});
-      const result = await response.json();
-      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : '参数无效');
-      setLaunchState('已提交：' + result.id);
-      setJobs(previous => [result, ...previous]);
-    } catch (e) { setLaunchState(e instanceof Error ? e.message : '提交失败'); }
-    finally { setSubmitting(false); }
-  }
-  useEffect(() => {
-    let alive = true;
-    async function readEndpoint(path: string) {
-      const response = await fetch(path);
-      if (!response.ok) throw new Error('研究服务读取失败');
-      return response.json();
-    }
-    const refresh = () => {
-      fetch('/api/jobs').then(r => r.ok ? r.json() : []).then(rows => {if(alive) setJobs(rows);}).catch(() => {});
-      return Promise.all([readEndpoint('/api/overview'), readEndpoint('/api/structures'), readEndpoint('/api/audit').catch(() => null)])
-      .then(([nextOverview, nextStructures, nextAudit]) => {
-        if (!Array.isArray(nextOverview.map) || !Array.isArray(nextStructures)) throw new Error('研究产物格式不正确');
-        if (alive) { setOverview(nextOverview); setStructures(nextStructures); setAudit(nextAudit); setError(''); }
-      }).catch(() => { if (alive) setError('研究服务暂时不可用，正在重连'); });
-    };
-    refresh();
-    const interval = window.setInterval(refresh, 5000);
-    return () => { alive = false; window.clearInterval(interval); };
-  }, []);
-  const feasible = overview.map.filter((cell) => cell.status !== 'infeasible');
-  const explored = new Set(structures.map((item) => `${item.family}-F${item.form}`));
-  const latest = structures.find(s => s.id === selected) || structures.at(-1);
-  return <div className="shell">
-    <header><div className="brand"><span className="mark">A</span><div><p className="eyebrow">RESEARCH OPERATING SYSTEM</p><h1>AutoAlpha <span>因子研究工作台</span></h1></div></div><div className="header-meta"><span className="live"><i /> {overview.status}</span><span>2026.09.07 · 日频 A 股</span></div></header>
-    <main>
-      {error && <p role="alert" className="runtime-notice">{error}</p>}
-      <section className="runtime-notice" aria-live="polite">
-        <strong>{overview.run_id || '尚无研究批次'}</strong>
-        <span> {overview.symbols || 0} 只股票 · {overview.dates || 0} 个交易日 · {structures.length} 个研究结构</span>
-        <p>{overview.message || '等待服务器研究结果'}</p>
-      </section>
-      <section className="panel launch-panel">
-        <h2>启动服务器研究</h2>
-        <p>所有计算在服务器执行。快速检查用于验证流程；完整检验仍须通过数据质量和独立确认。</p>
-        <form onSubmit={launchRun} className="run-form">
-          <label>想法来源<select name="provider" defaultValue="llm"><option value="llm">DeepSeek 生成</option><option value="hybrid">基线 + DeepSeek 演化</option><option value="manual">固定基线</option></select></label>
-          <label>股票数量（0 为全部）<input name="symbols" type="number" min="0" max="6000" defaultValue="600" required /></label>
-          <label>结构数量<input name="structures" type="number" min="1" max="12" defaultValue="1" required /></label>
-          <label>检验规模<select name="mode" defaultValue="engineering"><option value="engineering">快速检查</option><option value="formal">完整检验</option></select></label>
-          <label>研究数据<select name="dataProfile" defaultValue="daily"><option value="daily">日线与成交，不含竞价</option><option value="full">包含开盘竞价</option></select></label>
-          <label>条件发现<input name="discovery" type="checkbox" /></label>
-          <label>贝叶斯研究记忆<input name="bayes" type="checkbox" /></label>
-          <label>行业来源<select name="industrySource" defaultValue="rqdata_daily"><option value="rqdata_daily">RQData 逐日直接查询</option><option value="exact_intervals">原始历史区间</option></select></label>
-          <label>竞价处理<select name="auctionPolicy" defaultValue="inherit"><option value="inherit">随数据处理方式</option><option value="strict">严格校验</option><option value="quarantine">隔离异常，仅供探索</option></select></label>
-          <label>数据处理<select name="policy" defaultValue="strict"><option value="strict">严格校验</option><option value="quarantine">隔离异常，仅供探索</option></select></label>
-          <button type="submit" disabled={submitting || ['RUNNING','STARTING'].includes(overview.status) || jobs.some(j => ['QUEUED','RUNNING'].includes(j.status))}>开始研究</button>
-        </form>
-        <p role="status">{launchState}</p>
-        {jobs.slice(0,3).map(j => <p key={j.id}>{j.id} · {j.status}</p>)}
-      </section>
-      <section className="hero"><div><p className="eyebrow">FALSIFICATION DRIVEN</p><h2>把“看起来有效”变成<br /><em>可审计的研究结论</em></h2><p className="hero-copy">事前冻结机制与断言，按真实有效样本量测量，在确认样本上控制全库错误率。系统保留失败，也保留不知道。</p></div><div className="hero-stat"><strong>{overview.map.length || 70}</strong><span>想法空间格子</span><small>{feasible.length || 52} 个可行 · {explored.size} 个已探索</small></div></section>
-      <section className="status-grid"><Status icon={<Database />} label="数据层" value={overview.report?.length ? `${overview.report.filter((r) => r.status === 'pass').length}/${overview.report.length} checks` : '待运行'} tone={overview.report?.some((r) => r.status === 'fail') ? 'bad' : 'good'} /><Status icon={<Activity />} label="研究状态" value={overview.status} tone={overview.status === 'MEASURED' ? 'good' : 'warn'} /><Status icon={<ShieldCheck />} label="正式 PASS" value={structures.filter((s) => s.formal && s.verdict === 'PASS').length.toString()} tone="good" /><Status icon={<LockKeyhole />} label="审计链" value={audit?.valid ? `${audit.events} events` : '未锚定'} tone={audit?.valid ? 'good' : 'warn'} /></section>
-      <section className="workspace"><div className="panel map-panel"><PanelTitle eyebrow="01 · IDEA SPACE" title="机制地图" note="10 × 7 · 事前枚举" /><div className="map-grid">{overview.map.map((cell) => <div key={cell.id} className={`map-cell ${cell.status} ${explored.has(cell.id) ? 'explored' : ''}`} title={cell.reason}><span>{cell.family}</span><b>F{cell.form}</b>{explored.has(cell.id) && <i />}</div>)}</div><div className="legend"><span><i className="dot explored-dot" />已探索</span><span><i className="dot" />待研究</span><span><i className="dot blocked-dot" />机制不可行</span></div></div><div className="panel focus-panel"><PanelTitle eyebrow="02 · CURRENT EVIDENCE" title="当前结构" note={latest?.id || '尚未运行'} />{latest ? <><div className="structure-title"><span className="family-tag">{latest.family} · F{latest.form}</span><h3>{latest.name}</h3><p>{latest.blades.reason}</p></div><div className="metrics-row"><Metric label="覆盖度" value={`${(latest.measurement.coverage * 100).toFixed(1)}%`} /><Metric label="命中率" value={`${(latest.measurement.hit_rate * 100).toFixed(1)}%`} /><Metric label="结论" value={{PASS:'已确认',FAIL:'已证伪',UNDECIDABLE:'未能判定'}[latest.verdict]} accent={latest.verdict === 'PASS' ? 'green' : 'amber'} /></div><div className="assertions">{latest.blades.assertions.map((item) => <div className="assertion" key={item.id}><span className={`assertion-state ${item.state}`} /> <b>{item.id}</b><span>{item.subject}</span><strong>{item.state}</strong></div>)}</div><button className="text-button" onClick={() => setDetails(!details)}>{details ? '收起测量' : '查看完整测量'} <ArrowRight size={15} /></button>
-{details && <div className="measurement-table"><table><thead><tr><th>表达式</th><th>周期</th><th>IC</th><th>HAC t</th><th>最小可检出效应</th></tr></thead><tbody>{latest.measurement.curves.map(c => <tr key={c.expression + '-' + c.horizon}><td>{c.expression}</td><td>{c.horizon}日</td><td>{c.mean?.toFixed(4) ?? '—'}</td><td>{c.t?.toFixed(2) ?? '—'}</td><td>{c.mde?.toFixed(4) ?? '—'}</td></tr>)}</tbody></table></div>}</> : <EmptyState />}</div></section>
-      <section className="panel structure-list"><h2>研究结构</h2>
-        <p>以下为探索段结果；正式通过需要独立确认和数据质量验收。</p>
-        {structures.map(s => <button key={s.id} onClick={() => {setSelected(s.id); setDetails(true);}}
-          aria-pressed={latest?.id === s.id}>{s.name} · {s.verdict} · 安慰剂 {s.blades.placebo.state}</button>)}
-      </section>
-      <section className="lower-grid"><div className="panel quality"><PanelTitle eyebrow="03 · DATA QUALITY" title="数据质量闸门" note="未知口径不填零" />{overview.report?.slice(0, 7).map((row) => <div className="quality-row" key={row.name}><span className={`q-icon ${row.status}`}><CheckCircle2 size={14} /></span><span>{row.name}</span><small>{row.count.toLocaleString()}</small><b className={row.status}>{row.status}</b></div>) || <EmptyState />}</div><div className="panel power"><PanelTitle eyebrow="04 · POWER BUDGET" title="先算账，再搜索" note="交互检验门槛" /><div className="power-number"><strong>{overview.power?.interaction_mde?.toFixed(3) || '—'}</strong><span>确认段最小可检出交互效应</span></div><p>探索段只用于发现，确认段只读取一次。若功效不足，系统返回 UNDECIDABLE，不降低阈值制造方向。</p><div className="power-bar"><i style={{ width: `${Math.min(100, (overview.power?.projected_confirm_n_eff || 0) / 30)}%` }} /></div><small>确认侧 n_eff · {overview.power?.projected_confirm_n_eff?.toFixed(0) || '等待测量'}</small></div></section>
-    </main><footer><span>AutoAlpha Harness v5 · research artifacts are immutable</span><span>数据源：本地 Parquet · 研究层与交易层单向</span></footer>
-  </div>;
+async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  return response.json();
 }
-function Status({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: string }) { return <div className="status-card"><span className={`status-icon ${tone}`}>{icon}</span><div><small>{label}</small><strong>{value}</strong></div></div>; }
-function PanelTitle({ eyebrow, title, note }: { eyebrow: string; title: string; note: string }) { return <div className="panel-title"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><span>{note}</span></div>; }
-function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) { return <div className="metric"><small>{label}</small><strong className={accent || ''}>{value}</strong></div>; }
-function EmptyState() { return <div className="empty"><CircleAlert size={18} /><span>尚未产生可展示的结构产物</span></div>; }
-export default App;
-const root = document.getElementById('root');
-if (!root) throw new Error('缺少应用挂载节点');
-createRoot(root).render(<App />);
+function fmt(value: number | null | undefined, digits = 3): string { return value == null ? '?' : value.toLocaleString('en-US', { maximumFractionDigits: digits }); }
+function status(value: string): string { return value.replaceAll('_', ' '); }
+
+function Dashboard() {
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [reports, setReports] = useState<CompositionReport[]>([]);
+  const [runId, setRunId] = useState('');
+  const [tab, setTab] = useState('overview');
+  const [selected, setSelected] = useState('');
+  const [query, setQuery] = useState('');
+  const [dimension, setDimension] = useState<'3d' | '2d'>('3d');
+  const [reset, setReset] = useState(0);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const hash = window.location.hash;
+  if (hash === '#skill') return <><button className="c-back-console" onClick={() => { window.location.hash = ''; }}>? Back to console</button><Suspense fallback={<p>Loading Skill...</p>}><SkillPanel /></Suspense></>;
+  if (hash === '#studio') return <Suspense fallback={<p>Loading...</p>}><Studio /></Suspense>;
+  if (hash === '#workbench') return <Suspense fallback={<p>Loading...</p>}><Workbench /></Suspense>;
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const choices = await getJson<Run[]>('/api/control/runs');
+        const id = runId || choices[0]?.id;
+        if (!id) { setRuns(choices); setSnapshot(null); return; }
+        const [next, combos] = await Promise.all([getJson<Snapshot>(`/api/control/snapshot/${id}`), getJson<CompositionReport[]>(`/api/control/compositions/${id}`)]);
+        if (!cancelled) { setRuns(choices); setRunId(id); setSnapshot(next); setReports(combos); setError(''); }
+      } catch (reason) { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Research service unavailable'); }
+    };
+    refresh(); const timer = window.setInterval(refresh, 5000); return () => { cancelled = true; window.clearInterval(timer); };
+  }, [runId]);
+
+  const action = async (name: 'pause' | 'resume' | 'stop' | 'restart') => {
+    if (!snapshot || busy) return; setBusy(true);
+    try { const response = await fetch(`/api/control/runs/${snapshot.run_id}/action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: name }) }); if (!response.ok) throw new Error(`Control failed (${response.status})`); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Control failed'); } finally { setBusy(false); }
+  };
+  const cell = snapshot?.map.find(item => item.id === (selected || snapshot.current.cell)) || snapshot?.map[0];
+  const row = snapshot?.rows.find(item => item.id === selected) || snapshot?.rows.at(-1);
+  const filtered = snapshot?.rows.filter(item => `${item.name} ${item.id} ${item.family}`.toLowerCase().includes(query.toLowerCase())) || [];
+  const lastEvent = snapshot?.log.events.at(-1)?.text || 'Waiting for the next research event';
+  const stageEntries = snapshot ? Object.entries(snapshot.pipeline.stages || {}) : [];
+  const nextAction = !snapshot ? 'Waiting for a batch' : snapshot.status === 'RUNNING' ? (snapshot.current.frozen ? 'Finish measurement, then send evidence to falsification and memory' : 'Ask LLM to propose, review and freeze the next measurable structure') : snapshot.status === 'PAUSED' ? 'Waiting for the operator to resume' : snapshot.status === 'COMPLETED' ? 'Review confirmation evidence and decide whether to open composition gates' : 'Resume from checkpoint or stop this batch';
+  return <div className="control"><aside className="c-sidebar"><a className="c-brand" href="#"><span className="c-brand-mark">A</span><div>AURORA<small>ALPHA HARNESS</small></div></a><p className="c-nav-label">PROJECT CONSOLE</p><nav>{[['overview','\u8fd0\u884c\u603b\u89c8',Activity],['map','\u673a\u5236\u5730\u56fe',Box],['evidence','\u7ed3\u6784\u8bc1\u636e',FileCheck2],['compositions','\u7ec4\u5408\u95e8\u63a7',GitBranch],['events','\u7814\u7a76\u65e5\u5fd7',Terminal]].map(([id,label,Icon]) => { const I=Icon as typeof Activity; return <button key={String(id)} className={tab===id?'active':''} onClick={() => setTab(String(id))}><I size={17}/><span>{String(label)}</span></button>; })}</nav><div className="c-sidebar-bottom"><span className="c-dot"/> Local research runtime<a href="#skill">Research Skill <FileCode2 size={13}/></a></div></aside><div className="c-main"><header className="c-topbar"><div className="c-breadcrumb">AURORA / <b>{tab}</b></div><div className="c-top-actions"><span className={`c-connection ${error?'offline':''}`}><i/>{error?'Connection error':snapshot?'Live data':'Connecting'}</span><button className="c-icon-button" aria-label="Refresh" onClick={() => setRunId(value => value)}><RotateCcw size={16}/></button><button className="c-icon-button" aria-label="Presentation mode"><Expand size={16}/></button></div></header><main className="c-content"><section className="c-page-title"><div><p className="c-eyebrow">RECURSIVE SELF-IMPROVEMENT RESEARCH</p><h1>&#x81ea;&#x52a8;&#x6f14;&#x5316;&#x7814;&#x7a76;&#x63a7;&#x5236;&#x53f0; <span>LIVE</span></h1><p>Operate the evolution loop, inspect evidence, and export the protocol for your own data.</p></div><div className="c-run-picker"><label htmlFor="run-picker">&#x5f53;&#x524d;&#x7814;&#x7a76;&#x6279;&#x6b21;</label><select id="run-picker" value={runId} onChange={event => { setRunId(event.target.value); setSnapshot(null); }}>{!runs.length && <option value="">Waiting for runs</option>}{runs.map(item => <option value={item.id} key={item.id}>{item.id}</option>)}</select></div></section>{snapshot?.config.mode === 'fast' && <div className="c-alert"><GitBranch size={16}/>FAST explore - reduced placebo budget - prioritize evolution and composition review</div>}{error && <div className="c-alert" role="alert">{error}</div>}{snapshot && <section className="c-run-controls"><div><span className="c-eyebrow">PROCESS CONTROL</span><b>{status(snapshot.status)}</b></div><div className="c-run-control-buttons"><button onClick={() => action('pause')} disabled={busy || snapshot.status !== 'RUNNING'}><Pause size={13}/>Pause</button><button onClick={() => action('resume')} disabled={busy || snapshot.status === 'RUNNING'}><Play size={13}/>Resume</button><button className="danger" onClick={() => action('stop')} disabled={busy || ['STOPPED','COMPLETED'].includes(snapshot.status)}><Square size={13}/>Stop</button><button onClick={() => action('restart')} disabled={busy || snapshot.status === 'RUNNING'}>Restart</button></div></section>}{snapshot && tab === 'overview' && <section className="c-framework-story"><article className="c-panel c-story-intro"><div className="c-heading"><div><span>HOW AURORA THINKS</span><h2>What the system optimizes</h2></div><Activity size={18}/></div><p>AURORA is an RSI alpha research harness. The model proposes mechanisms, but the deterministic evaluator owns measurement, falsification, lineage and budgets. Every iteration must leave an auditable artifact before it can influence the next iteration.</p><div className="c-story-flow"><b>PROPOSE</b><i>&#x2192;</i><b>FREEZE</b><i>&#x2192;</i><b>MEASURE</b><i>&#x2192;</i><b>FALSIFY</b><i>&#x2192;</i><b>EVOLVE</b></div></article><article className="c-panel c-story-now"><div className="c-heading"><div><span>LIVE RESEARCH STATE</span><h2>What is running now</h2></div><span className="c-tag">{status(snapshot.status)}</span></div><p className="c-live-event">{lastEvent}</p><div className="c-story-meta"><span>Current cell <b>{snapshot.current.cell || 'pending'}</b></span><span>Freeze state <b>{snapshot.current.frozen ? 'frozen' : 'proposing'}</b></span><span>Queue <b>{Object.values(snapshot.queue).reduce((total, value) => total + value, 0)}</b></span></div><div className="c-stage-list">{stageEntries.slice(0, 6).map(([name, value]) => <div key={name}><i className={value.status.toLowerCase()}/><span>{name.replaceAll('_', ' ')}</span><b>{status(value.status)}</b></div>)}</div></article><article className="c-panel c-story-next"><div className="c-heading"><div><span>NEXT DECISION</span><h2>What happens next</h2></div><GitBranch size={18}/></div><p>{nextAction}</p><ol><li>Keep the current checkpoint and evidence hashes.</li><li>Use training evidence only when scheduling the next mutation.</li><li>Run independent confirmation before composition gating.</li></ol></article><article className="c-panel c-story-goal"><div className="c-heading"><div><span>OPTIMIZATION TARGET</span><h2>What the system optimizes</h2></div><FileCheck2 size={18}/></div><p>Find interpretable, reproducible, low-redundancy factors within finite model and statistical budgets, while turning every failure into research memory.</p><div className="c-goal-grid"><span><b>{snapshot.counts.children}</b> lineage children</span><span><b>{snapshot.counts.rejected}</b> rejected priors</span><span><b>{snapshot.audit.events}</b> audit events</span></div></article></section>}{!snapshot ? <div className="c-loading"><LoaderCircle/><h2>Waiting for a research batch</h2></div> : <>{<section className="c-kpis"><div className="c-kpi"><span>Attempts</span><strong>{snapshot.counts.attempts}<small>/ {snapshot.counts.budget}</small></strong></div><div className="c-kpi"><span>Measured</span><strong>{snapshot.counts.measured}</strong></div><div className="c-kpi"><span>Evolution children</span><strong>{snapshot.counts.children}</strong></div><div className="c-kpi"><span>LLM requests</span><strong>{fmt(snapshot.log.requests,0)}</strong></div></section>}{tab==='overview'||tab==='map' ? <section className="c-research-grid"><div className="c-panel c-map-panel"><div className="c-heading"><div><span>RESEARCH LANDSCAPE</span><h2>70-cell mechanism map</h2></div><label className="c-accessible-select">&#x9009;&#x62e9;&#x7814;&#x7a76;&#x5750;&#x6807;<select aria-label="&#x9009;&#x62e9;&#x7814;&#x7a76;&#x5750;&#x6807;" value={selected || cell?.id || ""} onChange={event => setSelected(event.target.value)}>{snapshot.map.map(item => <option value={item.id} key={item.id}>{item.id}</option>)}</select></label><div className="c-segment"><button onClick={() => setDimension('3d')}>3D</button><button onClick={() => setDimension('2d')}>2D</button></div></div>{dimension==='3d' ? <div className="c-scene-wrap"><div className="c-scene-label"><span>IDEA SPACE</span><b>{snapshot.map.length}</b><small>RESEARCH CELLS</small></div><Suspense fallback={<LoaderCircle/>}><ResearchScene cells={snapshot.map} rows={snapshot.rows} selected={cell?.id} onSelect={setSelected} reset={reset} fallback={<div/>}/></Suspense><button className="c-text-button" onClick={() => setReset(value => value+1)}>&#x590d;&#x4f4d;&#x4e09;&#x7ef4;&#x89c6;&#x89d2;</button></div> : <div className="c-matrix">{snapshot.map.map(item => <button className={`c-cell ${item.display_state}`} key={item.id} onClick={() => setSelected(item.id)}>{item.structures.length || '?'}</button>)}</div>}</div><div className="c-panel c-evidence-body"><div className="c-heading"><div><span>SELECTED COORDINATE</span><h2>{cell?.id || 'No coordinate selected'}</h2></div></div><p>{cell?.reason || 'Select a coordinate to inspect its mechanism and lineage.'}</p><b>{cell?.family_name} / {cell?.form_name}</b>{row && <p>Latest evidence: {row.name} | IC {fmt(row.primary.mean,5)} | {status(row.verdict)}</p>}</div></section> : tab==='evidence' ? <section className="c-evidence-grid"><div className="c-panel c-result-list"><h2>Evidence library</h2><label className="c-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search structure"/></label>{filtered.map(item => <button key={item.id} onClick={() => setSelected(item.id)}>{item.name}<small>{item.id} ? IC {fmt(item.primary.mean,5)}</small></button>)}</div><div className="c-panel"><h2>Evidence detail</h2>{row ? <pre className="c-detail">{JSON.stringify(row,null,2)}</pre> : <p>No measured evidence.</p>}</div></section> : tab==='compositions' ? <Suspense fallback={<LoaderCircle/>}><CompositionView reports={reports} rows={snapshot.rows}/></Suspense> : <section className="c-bottom-grid"><div className="c-panel c-events"><h2>Research events</h2>{snapshot.log.events.slice().reverse().map(event => <div key={event.id}><code>{event.text}</code></div>)}</div><div className="c-panel c-config"><h2>Research contract</h2><p>mode={snapshot.config.mode}</p><p>trees={snapshot.config.n_trees} ? placebo={snapshot.config.n_placebo}</p><a className="c-text-button" href={`/api/control/artifact/${snapshot.run_id}/report.md`} download><Download size={14}/>Download report</a></div></section>}</>}</main></div></div>;
+}
+createRoot(document.getElementById('root')!).render(<Dashboard/>);
