@@ -98,20 +98,20 @@ def inherit_research(root: Path, folder: Path, source_id: str,
 
 def prioritize_queue(queue: list[dict[str, Any]], remaining: int,
                      completed: int) -> None:
-    """排序下一次任务，保留全网格覆盖预算。
+    """排序下一次任务，优先异质性进化并保留有限种子探索。
 
     Args:
         queue: 原地调整的待办列表。
         remaining: 当前批次剩余尝试次数。
         completed: 已完成测量数量，前四次优先冷启动。
     Returns:
-        None: 种子和子结构交替；预算紧张时先完成未尝试种子。
+        None: 种子和子结构交替；冷启动后优先机制子代，每四次保留一次种子探索。
     """
     seeds = [i for i, task in enumerate(queue) if task["operator"] == "seed"]
     children = [i for i, task in enumerate(queue) if task["operator"] != "seed"]
     if not queue:
         return
-    if seeds and (completed < 4 or remaining <= len(seeds) or not children or completed % 2 == 0):
+    if seeds and (completed < 4 or not children or completed % 4 == 0):
         index = seeds[0]
     elif children:
         index = children[0]

@@ -57,7 +57,7 @@ def test_failed_placebo_skips_temporal_work(monkeypatch: pytest.MonkeyPatch) -> 
     Args:
         monkeypatch: pytest 替换工具，仅截获时间替代计算。
     Returns:
-        None: 用反向信号稳定触发首检验失败，保留全部重复次数。
+        None: 用独立噪声稳定触发首检验失败，保留全部重复次数。
     """
     def forbidden(*args: object) -> None:
         """拒绝时间检验调用；参数为测试替身输入，返回前直接报错。"""
@@ -67,7 +67,7 @@ def test_failed_placebo_skips_temporal_work(monkeypatch: pytest.MonkeyPatch) -> 
     signal = pd.DataFrame(rng.normal(size=(180, 40)))
     monkeypatch.setattr(placebo, "temporal_surrogate", forbidden)
     config = ResearchConfig(mode="engineering", n_placebo=100, workers=2)
-    result = placebo.full_market_placebo(signal, -signal, config)
+    result = placebo.full_market_placebo(signal, pd.DataFrame(rng.normal(size=signal.shape)), config)
     assert result["state"] == "fail"
     assert result["skipped_tests"] == ["time_shift", "iaaft"]
     assert len(result["tests"]) == 1
@@ -88,7 +88,7 @@ def test_invalid_surrogate_stops_without_rejecting_factor(monkeypatch: pytest.Mo
                   kind: str, horizon: int) -> tuple[np.ndarray, float]:
         """构造受控替代样本；输入测试面板等参数，返回反向信号和固定质量误差。"""
         calls.append(kind)
-        return -x, 0.2 if kind == "iaaft" else 0.0
+        return np.roll(x, 17, axis=0), 0.2 if kind == "iaaft" else 0.0
 
     rng = np.random.default_rng(8)
     signal = pd.DataFrame(rng.normal(size=(180, 40)))

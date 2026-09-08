@@ -17,6 +17,7 @@ from engine.audit import digest, now, write_json
 from engine.catalog import FAMILIES, FORM_CODES, Structure, vocabulary_registry
 from engine.config import SLOTS
 from engine.dsl import DIMENSIONS
+from engine.evolution import evolved_specification
 
 ROLE_FIELDS = {
     "proposer": {"coordinate", "vocabulary", "constraints", "lineage"},
@@ -175,6 +176,11 @@ class DeepSeek:
                                         if v["field"] == hint["moderator"]}
         if coordinate["form"] == 7 and not contract["allowed_events"]:
             raise ValueError("This event mechanism needs data unavailable in the registered field set")
+        evolved = evolved_specification(hint, cuts)
+        if evolved:
+            contract = {**contract, "frozen_evolved_signal": evolved,
+                "hypothesis_origin": "A-training-informed; never an independent prior",
+                "mechanism_requirement": "Explain why the exact conditional, reversed or interacting parent signals work; do not claim observed success"}
         context = role_context("proposer",
             coordinate={k:coordinate[k] for k in ("family", "family_name", "form", "form_name")},
             vocabulary=vocabulary,
@@ -219,6 +225,8 @@ class DeepSeek:
                 compiled["coverage"] = parent["coverage"]
             else:
                 compiled["coverage"] = "(" + parent["coverage"] + ") and (" + compiled["coverage"] + ")"
+        if evolved:
+            compiled.update(operational=evolved["operational"], coverage=evolved["coverage"])
         excluded = {plan.base_field, plan.pair_field}
         moderators = sorted(m for m in MODERATORS & fields if m.removesuffix("_pct") not in excluded)
         condition = plan.moderator if coordinate["form"] == 6 else None
@@ -275,19 +283,24 @@ class DeepSeek:
             "checks. Do not claim observed performance.", nonce=str(attempt))
         if reviewed.get("approved") is not True:
             raise ValueError("Prior review rejected: " + str(reviewed.get("reason", ""))[:300])
-        lineage = {k:v for k,v in hint.items() if k != "parent_specification"}
+        lineage = {k:v for k,v in hint.items() if k not in {"parent_specification", "donor_specification"}}
         lineage.update(parent=hint.get("parent"), operator=operator,
-                       origin="forest" if operator == "forest" else "llm_prior",
-                       search_condition=operator in {"forest", "crossover"},
+                       origin="training_informed" if evolved else "forest" if operator == "forest" else "llm_prior",
+                       search_condition=operator in {"forest", "crossover", "condition", "reverse", "interaction"},
                        operational_plan=compiled["plan"], event_expression=compiled["event_expression"])
+        if evolved:
+            lineage.update(representation_kind="interaction_composition" if operator == "interaction" else "conditional_composition" if operator == "condition" else "direction_revision",
+                           map_coordinate_role="proposal routing only for compositions; full representation and parents are frozen separately",
+                           frozen_evolved_signal=evolved)
         if condition:
-            lineage.update(moderator=condition, cut_id=plan.cut_id,
+            lineage.update(moderator=condition, cut_id=hint["gates"][0]["cut_id"] if operator == "condition" else plan.cut_id,
                            ungated_operational=compiled["operational"],
                            ungated_coverage=parent["coverage"] if parent else "in_pool")
         return Structure(id=f"S-{run_id}-{index + 1:03d}", name=spec["name"],
                          family=coordinate["family"], form=coordinate["form"],
                          mechanism=spec["mechanism"], labels=labels, assertions=assertions,
-                         operational=compiled["operational"], coverage=compiled["coverage"], lineage=lineage)
+                         operational=compiled["operational"], coverage=compiled["coverage"], lineage=lineage,
+                         primary_horizon=evolved["primary_horizon"] if evolved else 5)
 
     def bets(self, structure: Structure) -> dict[str, Any]:
         def one(index):

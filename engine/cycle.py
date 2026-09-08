@@ -5,7 +5,7 @@ Measurements determine whether a task is enqueued, never a requested direction.
 """
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from engine.audit import digest
 from engine.catalog import FAMILIES, build_map
@@ -15,11 +15,27 @@ class ProposalTask(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     family: str
     form: int = Field(ge=1, le=7)
-    operator: Literal["seed", "horizontal", "cross_family", "forest", "crossover", "probe"] = "seed"
+    operator: Literal["seed", "horizontal", "cross_family", "forest", "crossover", "probe", "condition", "reverse", "interaction"] = "seed"
     parent: str | None = None
     moderator: str | None = None
     donor: str | None = None
     depth: int = Field(default=0, ge=0, le=2)
+    gates: list[dict[str, str]] = Field(default_factory=list, max_length=4)
+    orientation: Literal[-1, 1] = 1
+    evidence_basis: str | None = None
+
+    @model_validator(mode="after")
+    def validate_evolution(self):
+        if self.operator in {"condition", "reverse", "interaction"} and not self.parent:
+            raise ValueError("An evolved hypothesis requires a parent")
+        if self.operator == "interaction" and (not self.donor or self.donor == self.parent):
+            raise ValueError("Interaction requires a distinct donor")
+        if self.operator == "condition" and not self.gates:
+            raise ValueError("Conditional evolution requires frozen gates")
+        for gate in self.gates:
+            if set(gate) != {"field", "cut_id", "branch"} or gate["branch"] not in {"low", "high"}:
+                raise ValueError("Invalid frozen gate")
+        return self
 
     @property
     def key(self):
@@ -51,17 +67,53 @@ def followup_tasks(row: dict[str, Any], history: list[dict[str, Any]],
     """Generate bounded new hypotheses, preserving untested versus contradicted."""
     structure = row["structure"]
     depth = int(structure["lineage"].get("depth", 0))
-    if row["blades"]["placebo"]["state"] != "pass" and not exploratory:
+    heterogeneous = bool(row.get("discovery", {}).get("forest", {}).get("training_rules"))
+    signed_candidate = bool(row.get("directionality", {}).get("reverse_candidate"))
+    if row["blades"]["placebo"]["state"] != "pass" and not exploratory and not (heterogeneous or signed_candidate):
         return {"tasks": [], "stop": "artifact gate; no mechanism revision"}
     if depth >= maximum_depth:
         return {"tasks": [], "stop": "frozen lineage depth budget exhausted"}
     power = row.get("power") or {}
-    if power.get("main_mde", 1) > 0.05 and not exploratory:
+    if power.get("main_mde", 1) > 0.05 and not exploratory and not (heterogeneous or signed_candidate):
         return {"tasks": [], "stop": "insufficient power; reopen with more independent dates"}
     family, form = structure["family"], structure["form"]
     available = {(c["family"], c["form"]) for c in build_map() if c["status"] == "unexplored"}
     ancestors = {r["id"] for r in history if r["family"] == family and r["form"] == form}
     tasks = []
+    # Heterogeneity and signed hypotheses precede representation changes.
+    forest = row.get("discovery", {}).get("forest", {})
+    rules = forest.get("training_rules", [])
+    selected_rules = []
+    for direction in (-1, 1):
+        candidate = next((rule for rule in rules if rule["orientation"] == direction), None)
+        if candidate is not None:
+            selected_rules.append(candidate)
+    for rule in rules:
+        if len(selected_rules) >= 2:
+            break
+        if rule not in selected_rules:
+            selected_rules.append(rule)
+    for rule in selected_rules:
+        tasks.append(ProposalTask(family=family, form=6, operator="condition",
+            parent=row["id"], moderator=rule["gates"][0]["field"], gates=rule["gates"],
+            orientation=rule["orientation"], depth=depth + 1,
+            evidence_basis="training_only_condition; independent confirmation required"))
+    if row.get("directionality", {}).get("reverse_candidate"):
+        tasks.append(ProposalTask(family=family, form=form, operator="reverse",
+            parent=row["id"], orientation=-1, depth=depth + 1,
+            evidence_basis="two_sided_training_effect; independent confirmation required"))
+    if rules:
+        for donor in history:
+            donor_rules = donor.get("discovery", {}).get("forest", {}).get("training_rules", [])
+            if (donor["id"] != row["id"] and donor["family"] != family and donor_rules
+                    and donor["structure"]["primary_horizon"] == structure["primary_horizon"]):
+                tasks.append(ProposalTask(family=family, form=5, operator="interaction",
+                    parent=row["id"], donor=donor["id"], depth=depth + 1,
+                    evidence_basis="two heterogeneous components; joint mechanism is a hypothesis"))
+                break
+    if tasks:
+        return {"exploratory": True, "tasks": [t.model_dump() for t in tasks[:4]],
+                "stop": None, "objective": "heterogeneity_and_evolution"}
     assertions = row["blades"]["assertions"]
     horizontal = any(a["kind"] in ("shape", "sign") and a["state"] == "violated"
                      for a in assertions) or row["measurement"].get("coverage", 1) < .1
@@ -114,13 +166,16 @@ def followup_tasks(row: dict[str, Any], history: list[dict[str, Any]],
             "stop": None if tasks else "no resolved actionable direction; no speculative child"}
 
 
-def prior_hint(task: ProposalTask, parent: dict[str, Any] | None) -> dict[str, Any]:
+def prior_hint(task: ProposalTask, parent: dict[str, Any] | None, donor: dict[str, Any] | None = None) -> dict[str, Any]:
     """Project a full research row into prior-only specification fields."""
     hint = task.model_dump()
     if parent is not None:
         s = parent["structure"]
         hint["parent_specification"] = {k: s[k] for k in
-            ("id", "family", "form", "mechanism", "labels", "operational", "coverage", "assertions")}
+            ("id", "family", "form", "mechanism", "labels", "operational", "coverage", "assertions", "primary_horizon")}
+    if donor is not None and task.operator == "interaction":
+        hint["donor_specification"] = {k: donor["structure"][k] for k in
+            ("id", "family", "form", "mechanism", "operational", "coverage", "primary_horizon")}
     return hint
 
 

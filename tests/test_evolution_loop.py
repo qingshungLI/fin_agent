@@ -43,8 +43,8 @@ def test_crossover_does_not_leak_donor_outcomes() -> None:
     assert followup_tasks(target, [target, donor])["tasks"] == []
 
 
-def test_seed_budget_survives_large_child_queue() -> None:
-    """验证有限预算先保住地图覆盖；无参数，返回 None，孩子不抢占最后的种子额度。"""
+def test_children_take_priority_without_exhaustive_grid_requirement() -> None:
+    """验证有限预算优先推进子代，基础格子仍保留探索机会。"""
     seeds = [t.model_dump() for t in initial_tasks()]
     child = ProposalTask(family="M2", form=6, parent="S-test-1", moderator="market_cap_pct",
                          operator="forest", depth=1).model_dump()
@@ -53,8 +53,8 @@ def test_seed_budget_survives_large_child_queue() -> None:
     for remaining in range(70, 0, -1):
         prioritize_queue(queue, remaining, 5)
         visited.append(queue.pop(0))
-    assert all(t["operator"] == "seed" for t in visited)
-    assert len({(t["family"], t["form"]) for t in visited}) == 70
+    assert sum(t["operator"] != "seed" for t in visited) == 20
+    assert sum(t["operator"] == "seed" for t in visited) == 50
     queue = [child, *seeds]
     prioritize_queue(queue, 210, 5)
     assert queue[0]["operator"] == "forest"
@@ -150,7 +150,7 @@ def test_pipeline_executes_frozen_child_and_resumes_without_remeasurement(
     data.mkdir()
     dates = pd.bdate_range("2020-01-01", periods=100)
     values = pd.DataFrame(np.random.default_rng(1).normal(size=(100, 40)), index=dates)
-    fields = {"close": values, "in_pool": values.notna()}
+    fields = {"close": values, "in_pool": values.notna(), "market_cap_pct": values.rank(axis=1, pct=True)*100}
     panel = MarketPanel(fields, {}, [])
     calls, hints = [], []
     failures = []
@@ -212,7 +212,7 @@ def test_pipeline_executes_frozen_child_and_resumes_without_remeasurement(
     monkeypatch.setattr(pipeline, "run_blades", blades)
     monkeypatch.setattr(pipeline, "stability", lambda *args: {"consistent": True})
     monkeypatch.setattr(pipeline, "cost_report", lambda *args: {"net_top_excess_mean": .01})
-    monkeypatch.setattr(pipeline, "variance_vs_mean_screen", lambda *args: {"mean_shift": ["market_cap_pct"]})
+    monkeypatch.setattr(pipeline, "variance_vs_mean_screen", lambda *args: {"mean_shift": []})
     monkeypatch.setattr(pipeline, "repeat_splits", lambda *args, **kwargs: {
         "p_median": .001, "selection_frequency": {"market_cap_pct": .95}})
     monkeypatch.setattr(pipeline, "initial_tasks", lambda: [initial_tasks()[0]])

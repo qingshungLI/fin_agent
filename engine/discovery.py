@@ -175,7 +175,7 @@ def blade_icm(frame: pd.DataFrame, moderator: str, cut: float, horizon: int, con
 
 
 def forest_propose(
-    frame: pd.DataFrame, candidates: list[str], cuts: dict[str, dict[str, Any]], config: ResearchConfig,
+    frame: pd.DataFrame, candidates: list[str], cuts: dict[str, dict[str, Any]], config: ResearchConfig, horizon: int = 5,
 ) -> dict[str, Any]:
     """训练 honest R-learning 浅森林；返回变量名频率和内部诊断，切点来自冻结表。"""
     if not candidates or len(candidates) > 5:
@@ -206,6 +206,7 @@ def forest_propose(
     symbol_codes, symbol_names = pd.factorize(residual.symbol, sort=False)
     block_codes = date_codes // 20
     topology_cache = {}
+    rule_votes = {}
     valid_trees, leaf_effects = 0, []
     training_dates = dates[:cutoff - 15]
     starts_by_tree = [rng.integers(0, len(training_dates) - 19,
@@ -243,14 +244,52 @@ def forest_propose(
                     if denominator > 1e-12:
                         effects.append(float(np.dot(f[selected], r[selected]) / denominator))
                 used = set(model.tree_.feature[model.tree_.feature >= 0])
-                topology_cache[key] = (accepted, effects, used)
-            accepted, effects, used = topology_cache[key]
+                paths = {}
+                def visit(node, gates):
+                    feature = model.tree_.feature[node]
+                    if feature < 0:
+                        paths[node] = gates
+                        return
+                    name = candidates[feature]
+                    thresholds = sorted({row["value"] for row in cuts.values() if row["field"] == name})
+                    threshold = thresholds[int(np.floor(model.tree_.threshold[node]))]
+                    cut_id = next(k for k, row in sorted(cuts.items())
+                                  if row["field"] == name and row["value"] == threshold)
+                    for branch, child in (("low", model.tree_.children_left[node]),
+                                          ("high", model.tree_.children_right[node])):
+                        visit(child, gates + [{"field": name, "cut_id": cut_id, "branch": branch}])
+                visit(0, [])
+                rules = []
+                if accepted:
+                    for leaf, gates in paths.items():
+                        if not gates:
+                            continue
+                        selected = (leaves == leaf) & estimate & eligible
+                        daily_num = pd.Series(f[selected] * r[selected]).groupby(residual.date.to_numpy()[selected]).sum()
+                        daily_den = pd.Series(weights[selected]).groupby(residual.date.to_numpy()[selected]).sum()
+                        stats = summarize(daily_num / daily_den.replace(0, np.nan), horizon, config)
+                        mean = stats.get("mean")
+                        if mean is not None:
+                            rules.append({"gates": gates, "orientation": -1 if mean < 0 else 1,
+                                          "training_effect": mean, "training_diagnostic": stats})
+                topology_cache[key] = (accepted, effects, used, rules)
+            accepted, effects, used, rules = topology_cache[key]
             if accepted:
                 valid_trees += 1
                 for variable in used:
                     votes[variable] += 1
                 leaf_effects.extend(effects)
-    return {"candidates": [{"name": name, "frequency": float(vote / max(1, config.n_trees))}
+                for rule in rules:
+                    rule_key = tuple((g["field"], g["cut_id"], g["branch"]) for g in rule["gates"]) + (rule["orientation"],)
+                    record = rule_votes.setdefault(rule_key, {**rule, "votes": 0})
+                    record["votes"] += 1
+    training_rules = [{**rule, "frequency": rule["votes"] / config.n_trees,
+                       "selection_segment": "A_training_only", "training_end": str(dates[-1]),
+                       "independent_confirmation": False}
+                      for rule in rule_votes.values() if rule["votes"] / config.n_trees >= .5]
+    training_rules.sort(key=lambda rule: (-rule["frequency"], -abs(rule["training_effect"])))
+    return {"training_rules": training_rules[:8],
+            "candidates": [{"name": name, "frequency": float(vote / max(1, config.n_trees))}
                            for name, vote in zip(candidates, votes) if vote > 0],
             "valid_trees": valid_trees, "trees": config.n_trees,
             "internal_leaf_effects": leaf_effects, "reason": "候选不代表因果识别；不向提案岗位提供效应方向"}
@@ -282,8 +321,9 @@ def evaluate_split(
     if train.date.nunique() >= 800 and validation.date.nunique() >= 400:
         print(f"discovery split {index + 1}/{config.n_splits}: "
               f"{len(train)} train rows, pid={os.getpid()}", flush=True)
-        proposed = forest_propose(train, candidates, cuts, local)
+        proposed = forest_propose(train, candidates, cuts, local, horizon)
         print(f"discovery split {index + 1}/{config.n_splits}: forest ready", flush=True)
+        result["training_rules"] = proposed.get("training_rules", [])
         if proposed["candidates"]:
             strongest = max(proposed["candidates"], key=lambda item: item["frequency"])["name"]
             threshold = next(row["value"] for row in cuts.values() if row["field"] == strongest)
@@ -324,7 +364,9 @@ def repeat_splits(
             votes[outcome["strongest"]] += 1
     return {"p_median": min(1.0, 2 * float(np.median(p_values))),
             "selection_frequency": {key: value / config.n_splits for key, value in votes.items()},
-            "fold_p": p_values, "segment": "A_internal_only", "split_diagnostics": outcomes}
+            "fold_p": p_values, "segment": "A_internal_only", "split_diagnostics": outcomes,
+            "training_rules": outcomes[0].get("training_rules", []) if outcomes else [],
+            "rule_selection": "First training split only; later validation outcomes never select rules"}
 
 
 def evolve_operators(structure: Any, results: list[dict[str, Any]], confirmed_conditions: list[str]) -> list[dict[str, Any]]:

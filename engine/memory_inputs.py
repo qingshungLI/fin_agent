@@ -23,7 +23,7 @@ def build_memory_inputs(rows, folder: Path, n_boot=1000, seed=42):
         for q in row["measurement"]["quarterly"]:
             if q["mean"] is not None and q["se"] is not None and q["se"] > 0:
                 records.append({"structure": row["id"], "period": q["period"],
-                                "family": row["family"], "form": str(row["form"]),
+                                "family": row["family"], "form": row["structure"].get("lineage", {}).get("representation_kind", str(row["form"])),
                                 "mean": q["mean"], "se": q["se"]})
     frame = pd.DataFrame(records)
     if frame.empty:

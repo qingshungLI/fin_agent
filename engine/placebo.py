@@ -164,7 +164,7 @@ def full_market_placebo(signal, returns, config, horizon=5, eligibility=None):
                     tests.append({"kind": kind, "state": "untested", "p": None,
                                   "spectral_error": error, "completed_repeats": completed,
                                   "null": [v for part in pieces for v in part[1]],
-                                  "observed": baseline,
+                                  "observed": baseline, "alternative": "two_sided_absolute_mean_ic",
                                   "reason": "surrogate spectral quality gate failed"})
                     return {**base, "state": "untested", "tests": tests,
                             "reason": "invalid IAAFT surrogate; not evidence against the factor",
@@ -173,9 +173,9 @@ def full_market_placebo(signal, returns, config, horizon=5, eligibility=None):
                       f"in {perf_counter() - started:.1f}s", flush=True)
         null = [value for piece in pieces for value in piece[1]]
         error = max(piece[2] for piece in pieces)
-        p = float((1 + np.count_nonzero(np.asarray(null) >= baseline)) / (len(null) + 1))
+        p = float((1 + np.count_nonzero(np.abs(np.asarray(null)) >= abs(baseline))) / (len(null) + 1))
         result = {"kind": kind, "p": p, "quantile": 1 - p, "null": null,
-                  "observed": baseline, "spectral_error": error if kind == "iaaft" else None,
+                  "observed": baseline, "alternative": "two_sided_absolute_mean_ic", "spectral_error": error if kind == "iaaft" else None,
                   "state": "pass" if p < .01 and error < .1 else "fail"}
         tests.append(result)
         # IAAFT is expensive; after a cheaper null fails, the conjunction is fixed.

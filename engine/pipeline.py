@@ -46,6 +46,7 @@ from engine.cycle import (
 )
 from engine.discovery import evolve_operators, repeat_splits, variance_vs_mean_screen
 from engine.llm import DeepSeek
+from engine.evolution import direction_report, research_role, evolution_summary, compare_child, training_stop
 from engine.memory import fit_hierarchy, next_probe, reconcile_law_posterior
 from engine.metrics import group_returns, measure_panel, power_budget, summarize
 
@@ -284,6 +285,7 @@ def finish_pending(state, rows, folder, config, bayes, llm, cells, checkpoint):
     write_json(folder / "laws.json", laws)
     if config.auto_evolve and llm:
         followups = followup_tasks(row, rows, exploratory=config.mode == "fast")
+        row["evolution_plan"] = followups
         write_json(destination / "followups.json", followups)
         for payload in reversed(followups["tasks"]):
             task = ProposalTask.model_validate(payload)
@@ -390,11 +392,11 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
         if cut_path.exists():
             cuts = json.loads(cut_path.read_text(encoding='utf-8'))
         else:
-            training = {k: v.iloc[:int(len(v) * .65)] for k, v in panel.fields.items()}
+            training = {k: v.iloc[:training_stop(len(v), 10)] for k, v in panel.fields.items()}
             cuts = freeze_cuts(training, candidates, config.seed)
             write_json(cut_path, cuts)
             store.append("cuts_frozen", {"run_id": run_id, "hash": digest(cuts),
-                                         "source": "first 65 percent of A dates; no returns"})
+                                         "source": "purged first training prefix of A dates; no returns"})
         state.setdefault("artifact_hashes", {}).update({
             "cuts.json": file_hash(cut_path),
             "data-quality.json": file_hash(folder / "data-quality.json"),
@@ -434,7 +436,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                 parent = next((r for r in rows if r["id"] == task.parent), None)
                 if config.provider == "llm" or (config.provider == "hybrid" and index >= 4):
                     try:
-                        structure = llm.propose(cell, run_id, index, set(panel.fields), cuts, prior_hint(task, parent))
+                        structure = llm.propose(cell, run_id, index, set(panel.fields), cuts, prior_hint(task, parent, next((r for r in rows if r["id"] == task.donor), None)))
                     except ValueError as exc:
                         rejection = {"coordinate": cell["id"], "reason": str(exc),
                                      "outcomes_read_for_proposal": False, "attempt": index+1}
@@ -534,18 +536,29 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
                    "cost": cost, "verdict": blades["verdict"], "formal": False,
                    "seconds": perf_counter() - begin,
                    "timings": {"measurement_seconds": measurement_seconds, "blades_seconds": blades_seconds}}
+            row["directionality"] = direction_report(stored, panel, structure, config)
+            comparison = compare_child(stored, panel, structure, rows, config, cuts)
+            if comparison is not None:
+                row["evolution_validation"] = comparison
             discovery_start = perf_counter()
-            if blades["placebo"]["state"] == "pass" or config.mode == "fast":
+            if discovery or blades["placebo"]["state"] == "pass" or config.mode == "fast":
                 screen_candidates = candidates[:4] if config.mode == "fast" else candidates
-                screened = variance_vs_mean_screen(stored["contribution"], panel.fields, screen_candidates, config)
+                prefix = training_stop(len(stored["contribution"]), structure.primary_horizon)
+                screened = variance_vs_mean_screen(stored["contribution"].iloc[:prefix],
+                    {k: v.iloc[:prefix] for k, v in panel.fields.items()}, screen_candidates, config)
+                screened["selection_segment"] = "A_training_prefix"
                 if config.mode == "fast":
                     # 有限重采样无力支撑严格多重检验；排序仅分配探索资源，不授予显著性。
                     ranked = sorted(screened.get("rows", []), key=lambda item: (item["mean_p"], item["name"]))
                     screened["exploratory_candidates"] = [item["name"] for item in ranked[:2]]
                 row["discovery"] = {"screen": screened,
                     "evolution": evolve_operators(structure, blades["assertions"], [])}
-                row["discovery"]["exploratory"] = config.mode == "fast"
-                forest_candidates = screened.get("exploratory_candidates", screened["mean_shift"])
+                row["discovery"]["exploratory"] = True
+                row["discovery"]["parent_placebo"] = blades["placebo"]["state"]
+                # A pure interaction may have zero marginal mean shift. Screening is
+                # diagnostic only; retain all available frozen moderator candidates.
+                forest_candidates = [name for name in candidates if name in panel.fields]
+                row["discovery"]["forest_candidate_policy"] = "frozen_moderators; no marginal-effect gate"
                 if discovery and forest_candidates:
                     row["discovery"]["forest"] = repeat_splits(panel, stored["signal_0"],
                                                                forest_candidates, cuts, config,
@@ -553,6 +566,7 @@ def _run(config, run_id, data_root, root, audit_root, discovery, bayes):
             else:
                 row["discovery"] = {"state": "BLOCKED", "reason": "placebo first; no mechanism interpretation"}
             row["timings"]["discovery_seconds"] = perf_counter() - discovery_start
+            row["research_role"] = research_role(row)
             row["confirmation"] = eligibility(row, config, panel.report)
             # Always export research factors, clearly distinguished from formal cards.
             stored["signal_0"].to_parquet(destination / "research-factor.parquet")
@@ -666,6 +680,7 @@ def publish(root, folder, rows, panel, state, store):
                 "pending": dict(Counter(t["operator"] for t in state.get("queue", []))),
                 "measured_operators": dict(Counter(r["structure"]["lineage"].get("operator", "seed") for r in rows)),
                 "unique_measured_cells": len({(r["family"], r["form"]) for r in rows})}
+    progress["evolution"] = evolution_summary(rows)
     write_json(folder / "progress.json", progress)
     overview = {"progress": progress, "run_id": state["run_id"], "status": state["status"], "map": cells,
                 "report": panel.report, "dates": len(panel.dates),
@@ -678,12 +693,16 @@ def publish(root, folder, rows, panel, state, store):
     text = ["# AutoAlpha research report", "", f"Run: {state['run_id']}", "",
             "All results below are exploratory A-segment evidence, not confirmed factors.",
             "B and H remain unread. Unresolved data quality prevents formal promotion.", "",
-            "| Structure | IC | Placebo | Provisional |", "|---|---:|---|---|"]
+            "Primary objective: heterogeneous mechanisms, signed effects and validated evolution.",
+            "Standalone return is not a component admission gate.", "",
+            "| Structure | IC | Research role | Placebo | Provisional |", "|---|---:|---|---|---|"]
     laws = ["# law.md", "", "Unconfirmed observations only. No trading routing permission.", ""]
     for row in rows:
         primary = next(x for x in row["measurement"]["curves"] if x["expression"] == 1
                        and x["horizon"] == row["structure"]["primary_horizon"])
-        text.append(f"| {row['name']} | {primary['mean']} | {row['blades']['placebo']['state']} | {row['verdict']} |")
+        text.append(f"| {row['name']} | {primary['mean']} | {row.get('research_role', {}).get('role', 'legacy_component')} | {row['blades']['placebo']['state']} | {row['verdict']} |")
+        text += ["", "Evolution: " + json.dumps(row.get("evolution_plan", {}), ensure_ascii=False),
+                 "Child comparison: " + json.dumps(row.get("evolution_validation", {}), ensure_ascii=False)]
         text += ["", f"Factor file: {row['id']}/research-factor.parquet",
                  "Promotion blockers: " + ", ".join(row["confirmation"]["reasons"]), ""]
         if row["blades"]["placebo"]["state"] == "pass":
