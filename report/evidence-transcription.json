@@ -1,0 +1,18 @@
+{
+  "provenance": "Manually transcribed from user-supplied report/factor_1.png; source pixels are authoritative. Not independently reproduced.",
+  "candidate": "CORE170-8EB14F14ED32",
+  "scope": "Core Lab screenshot, distinct from AURORA archived A-segment batch",
+  "horizon": 3,
+  "parent_ic": 0.0210019,
+  "child_ic": 0.149155,
+  "remainder_ic": 0.0158302,
+  "splits": [
+    {"name": "train", "ic": 0.149155, "hac_t": 2.59485, "days": 25, "stock_days": 2201},
+    {"name": "val", "ic": 0.0793042, "hac_t": 0.904779, "days": 9, "stock_days": 1112},
+    {"name": "data2", "ic": 0.417893, "hac_t": 9.05122, "days": 5, "stock_days": 370},
+    {"name": "data3", "ic": 0.080034, "hac_t": 0.998685, "days": 9, "stock_days": 1341},
+    {"name": "data4", "ic": 0.112425, "hac_t": 0.803779, "days": 10, "stock_days": 768},
+    {"name": "data5", "ic": 0.159068, "hac_t": 1.73908, "days": 9, "stock_days": 566}
+  ],
+  "independent_confirmation": false
+}

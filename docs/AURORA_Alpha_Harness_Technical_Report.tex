@@ -6,16 +6,18 @@
 \usepackage{fontspec}
 \usepackage{xeCJK}
 \usepackage{amsmath,amssymb,booktabs,longtable,tabularx,array}
-\usepackage{graphicx,xcolor,enumitem,hyperref,listings,fancyhdr,tikz}
-\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
+\usepackage{graphicx,xcolor,enumitem,hyperref,listings,fancyhdr,placeins}
 \setmainfont{TeX Gyre Termes}
-\setCJKmainfont{SimSun}
+\setCJKmainfont[AutoFakeBold=2,AutoFakeSlant=.15]{SimSun}
+\setCJKmonofont[AutoFakeSlant=.15]{Microsoft YaHei}
 \setCJKsansfont{Microsoft YaHei}
 \hypersetup{colorlinks=true,linkcolor=blue!60!black,urlcolor=blue!60!black,citecolor=blue!60!black}
 \definecolor{aurorablue}{HTML}{244B74}
 \definecolor{auroragold}{HTML}{C58A2B}
 \definecolor{codegray}{HTML}{F4F5F7}
 \lstset{basicstyle=\ttfamily\small,backgroundcolor=\color{codegray},frame=single,breaklines=true,columns=fullflexible}
+\setlength{\headheight}{15pt}
+\setlength{\emergencystretch}{2em}
 \pagestyle{fancy}
 \fancyhf{}
 \lhead{AURORA Alpha Harness}
@@ -29,7 +31,7 @@
 \title{\vspace{-1.2cm}\textcolor{aurorablue}{\Huge AURORA Alpha Harness}\\[0.3em]
 \Large 面向递归自我改进的可审计 Alpha 研究系统技术报告}
 \author{AutoAlpha Research Team}
-\date{2026 年 9 月 8 日}
+\date{2026 年 9 月 9 日}
 
 \begin{document}
 \maketitle
@@ -81,34 +83,13 @@ AURORA Alpha Harness 是一个将大语言模型、量化因子研究、统计�
 
 \begin{figure}[ht]
 \centering
-\begin{tikzpicture}[node distance=7mm and 9mm, every node/.style={font=\small},
-box/.style={draw=aurorablue!80,fill=blue!4,rounded corners,align=center,minimum width=3.0cm,minimum height=0.85cm},
-feedback/.style={-{Latex[length=2.5mm]},thick,auroragold}, flow/.style={-{Latex[length=2.5mm]},thick,aurorablue}]
-\node[box] (data) {????? MarketPanel};
-\node[box,right=of data] (spec) {Structure??????????};
-\node[box,right=of spec] (compile) {DSL ??????????};
-\node[box,below=of compile] (measure) {???????IC?placebo??????};
-\node[box,left=of measure] (forest) {?????honest ???};
-\node[box,right=of measure] (audit) {??????SQLite ??};
-\node[box,below=of forest] (evolve) {RSI ?????parent/operator/depth};
-\node[box,below=of audit] (product) {SDK?API??????????};
-\draw[flow] (data)--(spec);
-\draw[flow] (spec)--(compile);
-\draw[flow] (compile)--(measure);
-\draw[flow] (measure)--(forest);
-\draw[flow] (measure)--(audit);
-\draw[feedback] (forest)--(evolve);
-\draw[feedback] (audit)--(evolve);
-\draw[feedback] (evolve)--(spec);
-\draw[flow] (audit)--(product);
-\draw[flow] (evolve)--(product);
-\end{tikzpicture}
+\includegraphics[width=\textwidth]{figures/architecture.pdf}
 \caption{AURORA 的研究与产品分层。演化层只能生成新任务，不能改写冻结评估层。}
 \label{fig:architecture}
 \end{figure}
 
 \subsection{代码模块映射}
-\begin{longtable}{p{0.24\textwidth}p{0.68\textwidth}}
+\begin{longtable}{p{0.36\textwidth}p{0.56\textwidth}}
 \toprule
 模块 & 当前职责 \\
 \midrule
@@ -120,7 +101,7 @@ feedback/.style={-{Latex[length=2.5mm]},thick,auroragold}, flow/.style={-{Latex[
 \code{engine/discovery.py} & A 段候选筛查、交叉拟合正交化、honest R-learning 浅森林、ICM 交互矩。 \\
 \code{engine/discovery\_parallel.py} & fast 模式按时间切分的 Windows spawn 多进程发现。 \\
 \code{engine/cycle.py}, \code{continuation.py} & 任务队列、自动演化、父结构继承和续接批次。 \\
-\code{engine/llm.py} & DeepSeek proposer、reviewer、bettor、reconciler、inducer 的角色隔离与缓存。 \\
+\code{engine/llm.py} & DeepSeek proposer、operationalizer、reviewer、bettor、reconciler、inducer 的角色隔离与缓存。 \\
 \code{engine/audit.py} & SQLite 事件链、结构冻结、文件哈希和访问凭证。 \\
 \code{composition/} & 多结构组合 gate、成分快照和组合回放。 \\
 \code{research\_sdk/}, \code{studio\_api.py} & 企业数据上传、格子定义、独立运行和报告导出。 \\
@@ -192,16 +173,7 @@ neg(ts_std(ret_1d, 20))
 
 \begin{figure}[ht]
 \centering
-\begin{tikzpicture}[node distance=8mm and 5mm, every node/.style={font=\small},
-rstep/.style={draw=aurorablue!80,fill=blue!4,rounded corners,align=center,minimum width=2.45cm,minimum height=0.72cm}, arr/.style={-{Latex[length=2.2mm]},thick,aurorablue}]
-\node[rstep] (p) {PROPOSE\\DeepSeek / 用户};
-\node[rstep,right=of p] (c) {COMPILE\\受限 DSL};
-\node[rstep,right=of c] (m) {MEASURE\\A 段统计};
-\node[rstep,right=of m] (cr) {CRITICIZE\\四把刀};
-\node[rstep,below=of cr] (r) {RECORD\\哈希与检查点};
-\node[rstep,left=of r] (mu) {MUTATE\\受控子代};
-\draw[arr] (p)--(c);\draw[arr] (c)--(m);\draw[arr] (m)--(cr);\draw[arr] (cr)--(r);\draw[arr] (r)--(mu);\draw[arr] (mu)--(p);
-\end{tikzpicture}
+\includegraphics[width=\textwidth]{figures/evolution.pdf}
 \caption{AURORA 的 RSI 六步闭环。}
 \label{fig:rsi-loop}
 \end{figure}
@@ -217,7 +189,7 @@ Y_i = r_i - \widehat{m}(X_i), \qquad D_i = f_i - \widehat{g}(X_i),
 \end{equation}
 其中 $r_i$ 是未来行业残差收益，$f_i$ 是研究信号，$X_i$ 是规模、波动、成交和行业控制变量。\code{orthogonalize()} 在 purged folds 内拟合稀疏行业指标、三次多项式、样条和 Ridge nuisance model，然后计算残差。
 
-森林只在冻结切点上生成浅树。每棵树使用独立日期块和样本权重，叶子必须满足独立日期和证券覆盖要求。森林输出变量选择频率和叶子诊断，不向 LLM 直接提供“因果效应方向”。
+森林只在冻结切点上生成浅树。每棵树使用独立日期块和样本权重，叶子必须满足独立日期和证券覆盖要求。森林输出变量频率、叶子诊断和可审查的条件路径；训练选出的方向与条件进入新假设合同，不被当作独立因果结论或直接反馈验证收益。
 
 \subsection{Windows 多进程实现}
 fast 模式的两个时间切分相互独立，因此使用 Windows spawn 子进程并行计算：
@@ -228,19 +200,22 @@ fast 模式的两个时间切分相互独立，因此使用 Windows spawn 子进
   \item 结果按切分索引合并，保持随机种子、p 值和候选频率与串行结果一致。
 \end{itemize}
 
-在同一台机器的全量冻结结构上，候选筛查加发现阶段从 454.923 秒降至 238.610 秒，约 1.907 倍加速；两折 p 值和候选频率逐值一致。该数字是阶段级同机复核，不是对所有机器的固定承诺。
+仓库保留阶段级串行与多进程基准脚本；应以相同冻结结构、数据和线程预算比较耗时，同时检验输出一致性。本次报告没有重新测量全市场耗时，因此不将历史阶段加速比当作当前全流程承诺。
 
 \section{RSI 自动演化闭环}
 \subsection{预算与队列}
-\code{--full-grid} 当前建立 70 个初始 seed 任务，并预留 140 次自动演化预算，总尝试上限为 210。140 不是预先写死的 140 个表达式，而是后续队列可以消耗的预算；每完成一个结构，系统最多追加一个直接 follow-up，实际数量取决于可验证证据和可用格子。
+\code{--full-grid} 当前建立 70 个初始 seed 任务，并预留 140 次自动演化预算，总尝试上限为 210。140 不是预先写死的 140 个表达式，而是后续队列可以消耗的预算；四个冷启动后优先推进异质性子代，每四次保留一次种子探索。实际子代数量取决于训练证据、去重与剩余额度，队列可能提前耗尽。
 
-队列任务具有如下字段：
+队列的主要动作及触发来源如下；每次最多提出四个后续假设，实际入队仍受预算、深度与去重限制：
 \begin{center}
 \begin{tabular}{lll}
 \toprule
 operator & 含义 & 主要触发条件 \\
 \midrule
 seed & 网格冷启动 & 尚未研究的机制/形式坐标 \\
+condition & 条件区域 & 训练森林的完整条件路径 \\
+reverse & 反向假设 & 训练段方向诊断，不直接改变原信号结论 \\
+interaction & 跨构件交互 & 冻结父结构与供体的有界交互 \\
 horizontal & 同家族换形式 & shape/sign 断言被违反或覆盖不足 \\
 cross\_family & 竞争机制 & side 断言被违反 \\
 forest & 条件门控 & 森林频率高且探索 p 值满足 fast 阈值 \\
@@ -251,6 +226,8 @@ probe & 记忆引导探针 & inducer 提出有 law 证据的未探索坐标 \\
 \end{center}
 
 每个子代继承父任务的问题上下文，而不是父结构的结论。子代必须重新进行表达式编译、断言冻结、盲下注和完整测量，最大 lineage depth 为 2。父结构是失败、未知还是支持，会分别影响可生成的动作；fast 模式允许探索性子代继续验证，但不授予正式 law 或 PASS。
+
+\input{report_architecture_details.tex}
 
 \subsection{RSI 的严格边界}
 AURORA 的“自我改进”有四个约束：
@@ -327,18 +304,20 @@ fast 的目标是尽快回答“提案、编译、测量、批评、演化、组
   \item 输出 candidates、factors、daily path、quality status 和 artifact hashes。
 \end{enumerate}
 
-SDK 的输出状态是 \texttt{NEEDS\_REVIEW} 或 \texttt{REPLICATION\_CANDIDATE}，不会把单次用户运行直接包装成正式金融结论。
+轻量 SDK 的 \code{run\_experiment} 使用确定性的训练段变异，记录 \code{llm\_used: false}；不能将其演示为 DeepSeek 完整研究调用。SDK 的输出状态是 \texttt{NEEDS\_REVIEW} 或 \texttt{REPLICATION\_CANDIDATE}，不会把单次用户运行直接包装成正式金融结论。
 
 \subsection{控制面板}
 React/Three.js 控制台包含研究队列、运行模式、数据上传、结构卡、进度日志、3D 研究场景、父子血缘、候选表和组合视图。3D 场景的作用是把机制家族、结构形式、代际关系和运行状态可视化，而不是把统计结果装饰成确定结论。前端通过 FastAPI 读取结构化产物，不绕过后端检查直接修改研究状态。
 
+\FloatBarrier
+\input{report_results.tex}
 \section{当前实现状态与已知边界}
-截至 2026 年 9 月 8 日，仓库已经实现：
+截至 2026 年 9 月 9 日，仓库已经实现：
 \begin{itemize}[leftmargin=2em]
   \item 70 格初始网格、140 次演化预算和最大深度 2 的自动演化队列；
-  \item DeepSeek 五角色研究编排与响应缓存；
+  \item DeepSeek 六角色研究编排与响应缓存；
   \item A 段测量、placebo、断言、稳定性、增量、成本和条件发现；
-  \item Windows 多进程森林，阶段级复核约 1.907 倍加速且统计输出一致；
+  \item Windows spawn 多进程发现与串并行一致性测试；
   \item SQLite 审计、哈希冻结、检查点恢复和 reconciler 无效响应恢复；
   \item 组合 gate、回放、企业 SDK、FastAPI 和 3D 控制面板。
 \end{itemize}
@@ -367,7 +346,7 @@ React/Three.js 控制台包含研究队列、运行模式、数据上传、结�
   artifacts/aurora-fast-YYYYMMDD
 
 # 3. 启动控制面板
-.venv-research/Scripts/python.exe dashboard_server.py
+.venv-research/Scripts/python.exe -m uvicorn dashboard_server:app --host 127.0.0.1 --port 8001
 \end{lstlisting}
 
 运行完成后，评审者应首先查看：\code{checkpoint.json}、\code{queue.json}、\code{law.md}、\code{overview.json}、结构目录中的\code{frozen.json/result.json}，以及组合目录中的 gate 和回放报告。这样可以先检查研究过程，再查看候选收益。
@@ -395,4 +374,20 @@ Lineage depth & 子代距离根结构的演化深度，当前最大为 2。 \\
 \bottomrule
 \end{longtable}
 
+\clearpage
+\section{截图案例原始证据与重建方法}
+图中候选编号和数值来自用户提供文件。\par
+转录文件：\code{report/evidence-transcription.json}。\par
+来源哈希：\code{docs/figures/sources.json}。\par{}原图与转录不一致时以原图为准，并重新核对原始日志。制图使用 Matplotlib，输出嵌入字体的矢量 PDF 和 PNG 预览；流程图由显式节点与连线构建，研究曲线直接读取 JSON，未使用生成式图片替代统计证据。
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth,height=.47\textheight,keepaspectratio]{../report/factor_1.png}
+\caption{Core Lab 条件候选原始记录。表中的父子增量与多段复核值用于本报告案例重绘。}
+\vspace{.7em}
+\includegraphics[width=\textwidth]{../report/factor_2.png}
+\caption{发现后机制解释的原始记录。其定位是下一轮研究合同，不能回写成事前先验。}
+\end{figure}
+
+在仓库根目录运行 \code{scripts/build-report.ps1} 可重新生成四张报告图与 PDF。脚本要求项目 Python、Matplotlib、XeLaTeX 和所用中文字体；遇到制图或编译错误立即退出。Python 测试、浏览器验收与 PDF 构建分别提供工程证据，不代替数据准入、统计校准或市场验证。
 \end{document}

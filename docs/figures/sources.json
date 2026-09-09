@@ -1,0 +1,14 @@
+{
+  "sources": {
+    "docs\\research\\2026-09-09-results.json": "2404de541cc7295b19c6cf9113bfea419b5f0a13fa8ad4b4b89a4281492dd214",
+    "report\\evidence-transcription.json": "4847d110b15c5630d17d7c2097ec7da3ab07458b5af6f163291346974677f73b",
+    "report\\all_factor_show.png": "35fbebc12e46dba08d5cc098c55c211a876cb19b9d444a6335a79e4da88af0f1",
+    "report\\factor_1.png": "df6a9a241555a2d44e45359045c5840b4bf30f54bd7013f93a715d36d7dd53dd",
+    "report\\factor_2.png": "2840064f5997018b9047f6b1a0f6b8e539c30fabb3fbbf5aefa86e5530f1d122",
+    "report\\law.png": "012c53ff644135ae4e0f824dada8a374b25b30fdec15e05e4cb01967729308dd"
+  },
+  "completed": 11,
+  "children_from_lineage": 4,
+  "independently_confirmed": 0,
+  "note": "Top-level evolution counters disagree with per-candidate lineage; preserve source and derive counts from rows."
+}

@@ -10,7 +10,6 @@ from contextlib import contextmanager
 import gc
 import json
 import multiprocessing
-from multiprocessing.reduction import DupFd
 import os
 from pathlib import Path
 import re
@@ -133,6 +132,8 @@ def main():
     for key in ["OMP_NUM_THREADS","OPENBLAS_NUM_THREADS","MKL_NUM_THREADS","NUMEXPR_NUM_THREADS"]:
         os.environ[key]="1"
     cpus=physical_cpus(args.cpu_budget)
+    # Descriptor duplication is POSIX-only; defer it until platform validation.
+    from multiprocessing.reduction import DupFd
     os.sched_setaffinity(0,cpus)
     cells=[f"{task.family}-F{task.form}" for task in initial_tasks()]
     group_count=args.cpu_budget//args.cpus_per_search

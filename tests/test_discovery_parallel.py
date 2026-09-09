@@ -4,6 +4,7 @@
 """
 
 import os
+from types import SimpleNamespace
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,10 @@ def test_linux_available_memory_includes_reclaimable_cache(monkeypatch, availabl
     """Linux 缓存不应误压并发；实际低余量仍限制进程数。"""
     from engine.discovery_parallel import available_memory
     monkeypatch.setattr("engine.discovery_parallel.sys.platform", "linux")
+    monkeypatch.setattr("engine.discovery_parallel.os", SimpleNamespace(
+        name="posix",
+        sysconf=lambda key: {"SC_AVPHYS_PAGES": 123, "SC_PAGE_SIZE": 4096}[key],
+    ))
     monkeypatch.setattr(Path, "read_text", lambda self: (
         f"MemFree:        1000000 kB\nMemAvailable: {available_kib} kB\n"))
     result = available_memory()
@@ -106,6 +111,9 @@ def test_linux_memory_legacy_fallback(monkeypatch):
     """旧内核缺少估算字段时继续使用保守空闲页统计。"""
     from engine.discovery_parallel import available_memory
     monkeypatch.setattr("engine.discovery_parallel.sys.platform", "linux")
+    monkeypatch.setattr("engine.discovery_parallel.os", SimpleNamespace(
+        name="posix",
+        sysconf=lambda key: {"SC_AVPHYS_PAGES": 123, "SC_PAGE_SIZE": 4096}[key],
+    ))
     monkeypatch.setattr(Path, "read_text", lambda self: "MemFree: 1000 kB\n")
-    monkeypatch.setattr(os, "sysconf", lambda key: {"SC_AVPHYS_PAGES": 123, "SC_PAGE_SIZE": 4096}[key])
     assert available_memory() == 123 * 4096

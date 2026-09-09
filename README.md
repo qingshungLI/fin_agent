@@ -1,6 +1,11 @@
 > 当前研究循环及历史设计修订见 [异质性驱动的假设进化](docs/heterogeneity_evolution.md)。训练选出的方向/条件属于新假设，不是独立先验或已确认 alpha。
 
 # AURORA Alpha Harness
+
+交付入口、代码职责及本机检查见 [交付导航](docs/DELIVERY.md)。
+
+技术报告：[PDF](docs/AURORA_Alpha_Harness_Technical_Report.pdf) · [LaTeX 源码](docs/AURORA_Alpha_Harness_Technical_Report.tex) · [成果来源与重建说明](report/README.md)。
+
 > Official name: **AURORA Alpha Harness** (Auditable Unified Recursive Optimization and Research Architecture). RSI means Recursive Self-Improvement, not Relative Strength Index.
 
 三维研究控制台已接入真实批次：参见 [CONTROL_PANEL.md](CONTROL_PANEL.md)，包含启动方式、评委演示路径与数据边界。

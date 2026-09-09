@@ -35,22 +35,27 @@ Optional fields are validated and never silently imputed. Keep output directorie
 ## SDK entrypoint
 
 ```python
-from research_sdk import dataset_summary, run_experiment
+from research_sdk import CellSpec, ExperimentSpec, dataset_summary, run_experiment
 
 summary = dataset_summary(panel)
 report = run_experiment(
     panel,
-    {
-        "name": "short_reversal",
-        "mechanism": "short-term price shock reverts",
-        "expression": "neg(ts_z(ret_1d, 20))",
-        "horizon": 5,
-        "profile": "fast",
-        "evolve": True,
-    },
+    ExperimentSpec(
+        name="short_reversal",
+        cells=[CellSpec(
+            name="short_reversal",
+            mechanism="short-term price shock reverts",
+            expression="neg(ts_z(ret_1d, 20))",
+            horizon=5,
+        )],
+        profile="fast",
+        evolve=True,
+    ),
     "artifacts/my-run",
 )
 ```
+
+The portable SDK uses deterministic training-only mutations and records `llm_used: false`; DeepSeek-driven hypothesis generation belongs to the full research engine.
 
 Expressions use the bounded factor DSL. Do not use `eval` or arbitrary Python. Inspect `report.json`, candidate lineage, validation intervals, missing-return warnings, double-cost return, and the final confirmation state before using any factor.
 

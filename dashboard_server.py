@@ -19,7 +19,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from engine.api import app
-from engine.audit import AuditStore
+from engine.audit import AuditStore, write_json
+from engine.cache import file_hash
+from engine.pipeline import project_lock, runtime_identity
 from engine.catalog import build_map
 from server_jobs import process_alive
 
@@ -97,55 +99,149 @@ def result_card(folder: Path, sid: str) -> dict[str, Any]:
 
 
 def control_record(folder: Path) -> dict[str, Any]:
-    """Read the operator control sidecar for a research batch."""
+    """读取控制记录，缺失时视为运行请求。
+
+    Args:
+        folder: 已验证的批次目录。
+    Returns:
+        dict[str, Any]: 最近控制请求；损坏文件明确报错。
+    """
     return load(folder / "control.json", {"action": "run"}) or {"action": "run"}
 
 
 def write_control(folder: Path, action: str) -> dict[str, Any]:
-    """Persist one validated operator action and its audit timestamp."""
+    """原子写入控制请求，假设调用者持有批次控制锁。
+
+    Args:
+        folder: 已验证的批次目录。
+        action: run、pause 或 stop。
+    Returns:
+        dict[str, Any]: 已持久化的请求和 UTC 时间。
+    """
     if action not in {"run", "pause", "stop"}:
-        raise HTTPException(400, "Unsupported control action")
-    record = {"action": action, "updated_at": datetime.now(timezone.utc).isoformat(), "source": "control-panel"}
-    (folder / "control.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        raise HTTPException(400, "不支持的控制操作")
+    record = {"action": action, "updated_at": datetime.now(timezone.utc).isoformat(),
+              "source": "control-panel"}
+    write_json(folder / "control.json", record)
     return record
 
 
+def validate_resume(state: dict[str, Any]) -> None:
+    """快速核对恢复进程的代码和环境，数据与模型身份仍由引擎完整验证。
+
+    Args:
+        state: 具有冻结 identity 的检查点。
+    Returns:
+        None: 不一致时返回 HTTP 409，不修改已有控制请求或冻结身份。
+    """
+    identity = state.get("identity", {})
+    code = {path.name: file_hash(path) for path in sorted((ROOT / "engine").glob("*.py"))}
+    if not code or identity.get("code") != code:
+        raise HTTPException(409, "当前源码与批次冻结版本不同；请使用原版本恢复，或新建研究批次。")
+    if identity.get("environment") != runtime_identity():
+        raise HTTPException(409, "当前 Python 或依赖环境与冻结记录不同，不能直接恢复。")
+
+
 def launch_resume(run_id: str, folder: Path) -> dict[str, Any]:
-    """Resume a checkpoint in a detached local process and record its PID."""
-    checkpoint = folder / "checkpoint.json"
+    """启动恢复子进程并记录 PID，假设调用者已校验身份并持有控制锁。
+
+    Args:
+        run_id: 已验证的批次标识。
+        folder: 具有 checkpoint.json 的批次目录。
+    Returns:
+        dict[str, Any]: 进程 PID 与 RESUMING 状态；它不表示引擎已通过完整恢复验证。
+    """
     command = [sys.executable, "-u", "-c",
         "import json,sys; from pathlib import Path; from engine.config import ResearchConfig; "
         "from engine.pipeline import run_research; s=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8')); "
         "run_research(ResearchConfig.model_validate(s['identity']['config']),s['run_id'],"
         "Path(s['identity']['data_root']),Path(sys.argv[2]),s['identity']['discovery'],s['identity']['bayes'])",
-        str(checkpoint), str(ARTIFACTS)]
-    stdout = (ARTIFACTS / f"{run_id}.stdout.log").open("a", encoding="utf-8")
-    stderr = (ARTIFACTS / f"{run_id}.stderr.log").open("a", encoding="utf-8")
-    process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
-                               start_new_session=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        str(folder / "checkpoint.json"), str(ARTIFACTS)]
     record = load(ARTIFACTS / f"{run_id}-processes.json", {}) or {}
-    record.update({"research_launcher_pid": process.pid, "control_panel_resume_at": datetime.now(timezone.utc).isoformat()})
-    (ARTIFACTS / f"{run_id}-processes.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    # 父进程及时关闭日志句柄；子进程持有自己的句柄，继续写日志不受影响。
+    with (ARTIFACTS / f"{run_id}.stdout.log").open("a", encoding="utf-8") as stdout, \
+         (ARTIFACTS / f"{run_id}.stderr.log").open("a", encoding="utf-8") as stderr:
+        process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+            stdout=stdout, stderr=stderr, start_new_session=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    record.update({"research_launcher_pid": process.pid,
+                   "control_panel_resume_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        write_json(ARTIFACTS / f"{run_id}-processes.json", record)
+    except OSError:
+        # 只终止本次刚启动但未能登记的子进程，避免留下控制台无法追踪的任务。
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        raise
     return {"pid": process.pid, "status": "RESUMING"}
+
+
+def apply_control(run_id: str, folder: Path, action: str) -> dict[str, Any]:
+    """在控制锁内检查状态并提交指令，restart 沿用幂等恢复语义。
+
+    Args:
+        run_id: 已验证的批次标识。
+        folder: 批次目录。
+        action: pause、stop、resume 或 restart。
+    Returns:
+        dict[str, Any]: 请求回执；不将回执伪装成实际 PAUSED 或 STOPPED。
+    """
+    state = load(folder / "checkpoint.json")
+    status = state.get("status")
+    if status not in {"RUNNING", "PAUSED", "RESUMING", "FAILED", "STOPPED", "INTERRUPTED", "COMPLETED"}:
+        raise HTTPException(409, "检查点状态未知，不能自动执行控制操作。")
+    if status == "COMPLETED":
+        raise HTTPException(409, "批次已完成；请新建批次开展后续研究。")
+    if action in {"pause", "stop"}:
+        if status not in {"RUNNING", "PAUSED", "RESUMING"}:
+            raise HTTPException(409, f"当前状态 {status} 不接受暂停或停止请求。")
+        return {"run_id": run_id, "status": "REQUESTED", "control": write_control(folder, action)}
+    record = load(ARTIFACTS / f"{run_id}-processes.json", {}) or {}
+    pid = record.get("research_launcher_pid")
+    if pid and process_alive(pid):
+        return {"run_id": run_id, "status": "REQUESTED", "pid": pid,
+                "control": write_control(folder, "run")}
+    if not pid and status in {"RUNNING", "PAUSED", "RESUMING"}:
+        # 外部 CLI 启动的进程可能没有控制台 PID，不能据此断言它已退出并重复启动。
+        if action == "restart":
+            raise HTTPException(409, "缺少进程记录，无法确认原进程已退出；请先核对启动终端。")
+        return {"run_id": run_id, "status": "REQUESTED", "control": write_control(folder, "run")}
+    validate_resume(state)
+    previous = control_record(folder)
+    write_control(folder, "run")
+    try:
+        launched = launch_resume(run_id, folder)
+    except OSError as exc:
+        write_json(folder / "control.json", previous)
+        raise HTTPException(503, "恢复进程未能启动，请检查本机日志目录和执行环境。") from exc
+    return {"run_id": run_id, **launched}
 
 
 @app.post("/api/control/runs/{run_id}/action")
 def run_action(run_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Pause, resume, stop, or restart one local research checkpoint."""
-    folder = run_folder(run_id)
-    action = str(payload.get("action", ""))
-    if action == "restart":
-        write_control(folder, "run")
-        return {"run_id": run_id, **launch_resume(run_id, folder)}
-    if action == "resume":
-        write_control(folder, "run")
-        record = load(ARTIFACTS / f"{run_id}-processes.json", {}) or {}
-        if process_alive(record.get("research_launcher_pid")):
-            return {"run_id": run_id, "status": "RUNNING", "pid": record.get("research_launcher_pid")}
-        return {"run_id": run_id, **launch_resume(run_id, folder)}
-    result = write_control(folder, action)
-    return {"run_id": run_id, "status": action.upper(), "control": result}
+    """串行处理批次控制命令，控制锁与长期研究锁分开。
 
+    Args:
+        run_id: 批次标识。
+        payload: 仅含 action 的请求对象。
+    Returns:
+        dict[str, Any]: 已提交回执；并发请求返回 HTTP 409，避免重复启动。
+    """
+    action = payload.get("action")
+    if set(payload) != {"action"} or not isinstance(action, str) or action not in {
+        "pause", "resume", "stop", "restart"
+    }:
+        raise HTTPException(400, "请求必须仅包含有效的 action。")
+    folder = run_folder(run_id)
+    try:
+        with project_lock(ARTIFACTS / ".control-locks" / run_id):
+            return apply_control(run_id, folder, action)
+    except RuntimeError as exc:
+        raise HTTPException(409, "另一个控制请求正在处理中，请刷新状态后重试。") from exc
 
 @app.get("/api/control/skill")
 def skill_download() -> FileResponse:
