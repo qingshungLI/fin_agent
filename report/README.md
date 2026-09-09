@@ -10,7 +10,7 @@
 
 这些截图与 `docs/research/2026-09-09-results.json` 是两组来源，报告分别呈现。不要将它们拼接为一个批次的收益或候选总数。转录以原图为依据，缺少原始序列时不补造置信区间。
 
-最终报告位于 `docs/AURORA_Alpha_Harness_Technical_Report.pdf`，主源码及两个分章节源码均在 `docs/`。报告图使用 Matplotlib 生成矢量 PDF 和 PNG 预览；来源 SHA256 清单在 `docs/figures/sources.json`。
+最终报告位于 `docs/AURORA_Alpha_Harness_Technical_Report.pdf`，主源码及分章节源码均在 `docs/`。报告图使用 Matplotlib 生成矢量 PDF 和 PNG 预览；来源 SHA256 清单在 `docs/figures/sources.json`。
 
 从仓库根目录重建：
 
@@ -18,4 +18,5 @@
 powershell -ExecutionPolicy Bypass -File scripts/build-report.ps1
 ```
 
-需要项目 Python 环境中的 Matplotlib、XeLaTeX、TeX Gyre Termes、宋体及微软雅黑。制图入口是 `scripts/build_report_figures.py`；更换机器时可传入 `-Python` 指定解释器。
+需要项目 Python 环境中的 Matplotlib、XeLaTeX、TeX Gyre Termes 与 Noto CJK 字体。制图入口是 `scripts/build_report_figures.py`；更换机器时可传入 `-Python` 指定解释器。
+也可安装 Noto CJK 字体后，从各 .tex 所在目录使用 Tectonic 编译；封面先编译 docs/figures/brand_cover.tex，再编译技术报告。演示 PDF 使用 docs/ppt/AURORA_项目演示.tex，保留经过检查的矢量页面并替换新封面。

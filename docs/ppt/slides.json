@@ -6,7 +6,7 @@
     "layout": "S01",
     "notes": [
       "今天重点介绍架构：研究如何被提出、执行、演化和审计。",
-      "沿用项目原始封面；其中 e 轨迹属于实验性诊断，正式判定采用独立确认流程。",
+      "封面由 LaTeX 重建；独立确认数为 0，e 轨迹仍为实验性诊断。",
       "递归改进的对象是研究假设与任务分配。"
     ],
     "elements": []
@@ -2064,6 +2064,51 @@
         "size": 25,
         "color": "A7C3C5"
       }
+    ]
+  },
+  {
+    "id": "extra-13",
+    "title": "数据导入与研究合同",
+    "layout": "figure",
+    "image": "images/extra-13.png",
+    "notes": [
+      "来源：用户提供的界面截图。"
+    ]
+  },
+  {
+    "id": "extra-14",
+    "title": "研究网格与候选详情",
+    "layout": "figure",
+    "image": "images/extra-14.png",
+    "notes": [
+      "来源：用户提供的界面截图；不代表独立确认。"
+    ]
+  },
+  {
+    "id": "extra-15",
+    "title": "候选研究过程可见",
+    "layout": "figure",
+    "image": "images/extra-15.png",
+    "notes": [
+      "另一批次25个结构，不与报告15候选合并。"
+    ]
+  },
+  {
+    "id": "extra-16",
+    "title": "report 结果展示",
+    "layout": "figure",
+    "image": "images/extra-16.png",
+    "notes": [
+      "来源：report/factor_1.png 与 evidence-transcription.json。"
+    ]
+  },
+  {
+    "id": "extra-17",
+    "title": "report 原始结果",
+    "layout": "figure",
+    "image": "images/extra-17.png",
+    "notes": [
+      "来源：report/all_factor_show.png；promote不等于正式确认。"
     ]
   },
   {

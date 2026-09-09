@@ -1,0 +1,24 @@
+{
+  "source": "用户提供的归档.zip，2026-09-09",
+  "scope": "界面演示快照；与15候选归档不是同一批次；不作为实时状态或独立确认依据",
+  "images": [
+    {
+      "file": "data-intake.png",
+      "original": "d7d0261b2620c174e226f6ae36949259.png",
+      "title": "数据导入与字段合同",
+      "sha256": "f444faa1b913cf26b81efd7340dfddcd1526e6b8ea55f3255f218e9f4128d790"
+    },
+    {
+      "file": "research-grid.png",
+      "original": "30dfb4bddf1acd1866ca6691c0c7dcc4.png",
+      "title": "机制与表达形式网格",
+      "sha256": "2d32ed383e272fe0cfd5a8b7b75c9996be8fea369c364a7746c0bfef672b4804"
+    },
+    {
+      "file": "candidate-detail.png",
+      "original": "dacdc2bda40d057a06df15b851663ec2.png",
+      "title": "候选详情与研究状态",
+      "sha256": "20119e0eac4e2d3fb5b502e32d8967f4f9370a2013a29a29091e9143513dd870"
+    }
+  ]
+}

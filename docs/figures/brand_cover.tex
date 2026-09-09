@@ -1,0 +1,48 @@
+\documentclass{article}
+\usepackage[paperwidth=960pt,paperheight=540pt,margin=45pt]{geometry}
+\usepackage{fontspec,xeCJK,tikz,xcolor,hyperref}
+\setmainfont{TeX Gyre Heros}
+\setCJKmainfont{Noto Sans CJK SC}
+\definecolor{bg}{HTML}{102B30}
+\definecolor{fg}{HTML}{E9F2E9}
+\definecolor{acc}{HTML}{72CBC0}
+\definecolor{muted}{HTML}{A7C3C5}
+\hypersetup{pdftitle={AURORA Alpha Harness},pdfauthor={AURORA Research Team},pdfsubject={可审计的自演化量化研究智能体}}
+\pagestyle{empty}
+\begin{document}
+\begin{tikzpicture}[remember picture,overlay]
+\fill[bg] (current page.south west) rectangle (current page.north east);
+\draw[acc!30,line width=.5pt] ([xshift=25pt,yshift=25pt]current page.south west) rectangle ([xshift=-25pt,yshift=-25pt]current page.north east);
+\foreach \i in {0,...,3}{\draw[acc!15,line width=1pt] ([xshift=740pt,yshift=-80pt-\i*30pt]current page.north west)--++(100pt,-25pt)--++(-100pt,-25pt)--++(-100pt,25pt)--cycle;}
+\end{tikzpicture}
+\color{fg}
+{\large\color{muted}机制驱动 · 实验有界 · 证据可追溯}\par
+\vspace{34pt}
+{\fontsize{64}{70}\selectfont\bfseries AURORA}\par
+\vspace{8pt}
+{\fontsize{26}{32}\selectfont ALPHA HARNESS}\par
+\vspace{24pt}
+{\fontsize{23}{30}\selectfont 可审计的自演化量化研究智能体}\par
+\vspace{12pt}
+{\large\color{muted}将机制假设、训练线索和研究证据连接为可复核的工作流。}\par
+\vspace{32pt}
+\begin{minipage}[t]{.29\textwidth}
+{\Large\color{acc}01\quad 提出与冻结}\par\medskip
+机制合同与受限表达式\par
+测量前记录研究对象
+\end{minipage}\hfill
+\begin{minipage}[t]{.29\textwidth}
+{\Large\color{acc}02\quad 检验与演化}\par\medskip
+训练线索形成新的假设\par
+子代重新接受独立检验
+\end{minipage}\hfill
+\begin{minipage}[t]{.29\textwidth}
+{\Large\color{acc}03\quad 记录与复核}\par\medskip
+保存支持、冲突与未知\par
+探索不等于正式确认
+\end{minipage}
+\vfill
+{\color{muted}2026-09-09 停止快照：15 个完成候选 · 6 个已评估子代 · 独立确认 0}\par
+\medskip
+{\small\color{muted}研究原型与探索结果；不构成已验证的交易收益或统计保证。}
+\end{document}

@@ -1,7 +1,7 @@
 # 回测框架使用说明
 
-本目录把原 `E:\sentiment` 的回测链路迁移到 `D:\finance_agent`，直接使用
-`D:\finance_agent\data` 中的 Parquet 数据，不复制数据文件。
+本目录把原 `原项目` 的回测链路迁移到 `.`，直接使用
+`./data` 中的 Parquet 数据，不复制数据文件。
 
 ## 目录
 
@@ -17,7 +17,7 @@
 建议使用目标项目自己的虚拟环境；如果尚未创建：
 
 ```powershell
-cd D:\finance_agent
+cd .
 py -3.13 -m venv .venv
 .venv\Scripts\python.exe -m pip install -U pip
 .venv\Scripts\python.exe -m pip install pandas pyarrow duckdb numpy scipy rqalpha lightgbm
@@ -26,8 +26,8 @@ py -3.13 -m venv .venv
 RQAlpha 不是数据下载器。正式回测前需要安装本地 Mod：
 
 ```powershell
-cd D:\finance_agent
-$env:PYTHONPATH = "D:\finance_agent\backtest"
+cd .
+$env:PYTHONPATH = "./backtest"
 .venv\Scripts\python.exe -m pip install -e .\backtest\rqalpha_mod_local_rqdata
 ```
 
@@ -38,8 +38,8 @@ $env:PYTHONPATH = "D:\finance_agent\backtest"
 先检查数据，再生成 DuckDB 视图：
 
 ```powershell
-cd D:\finance_agent
-$env:PYTHONPATH = "D:\finance_agent\backtest"
+cd .
+$env:PYTHONPATH = "./backtest"
 .venv\Scripts\python.exe .\backtest\rqalpha_smoke.py
 .venv\Scripts\python.exe .\backtest\build_warehouse.py
 ```
@@ -47,15 +47,15 @@ $env:PYTHONPATH = "D:\finance_agent\backtest"
 默认路径如下：
 
 ```text
-数据根目录: D:\finance_agent\data
-DuckDB:    D:\finance_agent\data\warehouse.duckdb
+数据根目录: ./data
+DuckDB:    ./data\warehouse.duckdb
 ```
 
 可通过环境变量切换数据集或仓库位置：
 
 ```powershell
-$env:FINANCE_DATA_ROOT = "D:\finance_agent\data"
-$env:FINANCE_WAREHOUSE_PATH = "D:\finance_agent\data\warehouse.duckdb"
+$env:FINANCE_DATA_ROOT = "./data"
+$env:FINANCE_WAREHOUSE_PATH = "./data\warehouse.duckdb"
 ```
 
 数据目录至少应包含：`daily_bar`、`trading_calendar.parquet`、`instruments.parquet`、
@@ -65,8 +65,8 @@ $env:FINANCE_WAREHOUSE_PATH = "D:\finance_agent\data\warehouse.duckdb"
 ## 运行最小 RQAlpha 回测
 
 ```powershell
-cd D:\finance_agent
-$env:PYTHONPATH = "D:\finance_agent\backtest"
+cd .
+$env:PYTHONPATH = "./backtest"
 .venv\Scripts\python.exe .\backtest\rqalpha_minimal_backtest.py
 ```
 
@@ -80,7 +80,7 @@ $env:PYTHONPATH = "D:\finance_agent\backtest"
 `panel_sw3*.parquet`，执行固定参数的 purged walk-forward 评估：
 
 ```powershell
-cd D:\finance_agent
+cd .
 .venv\Scripts\python.exe .\backtest\industry_rotation_model.py --exact --fwd 10
 ```
 

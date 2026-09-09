@@ -34,6 +34,7 @@ ROOT_FILES = {
     ".env.example",
     ".gitignore",
     "README.md",
+    "competition_submission.md",
     "PSEUDOCODE.md",
     "IMPLEMENTATION.md",
     "RUN_PIPELINE.md",
@@ -44,13 +45,7 @@ ROOT_FILES = {
     "ENTERPRISE_READINESS.md",
     "backtest.md",
 }
-OMIT_SCRIPTS = {
-    "build_competition_deck.py",
-    "build_paper_diagrams.py",
-    "build_report_figures.py",
-    "package_submission.py",
-    "build-report.ps1",
-}
+OMIT_SCRIPTS = set()
 
 
 def git(*args: str) -> str:
@@ -86,9 +81,12 @@ def core_files() -> list[Path]:
             allowed = True
         if rel.parts[0] == "scripts" and path.suffix in {".py", ".ps1", ".sh"}:
             allowed = path.name not in OMIT_SCRIPTS
-        if rel.parts[0] == "docs" and path.suffix == ".md" and "ppt" not in rel.parts:
+        if rel.parts[0] == "docs" and path.suffix == ".md" :
             allowed = True
-        if name == "docs/research/2026-09-09-results.json" or name == "data/data.md":
+        if ((rel.parts[0] == "report" and path.suffix in {".md", ".json", ".png"})
+                or (rel.parts[0] == "docs" and path.suffix in {".tex", ".pdf", ".png", ".json", ".pptx", ".html", ".svg", ".jpg"}
+                    )
+                or name == "docs/research/2026-09-09-results.json" or name == "data/data.md"):
             allowed = True
         if allowed:
             if path.name.startswith(".env") and path.name != ".env.example":
@@ -120,6 +118,8 @@ def main() -> None:
         p.relative_to(ROOT).as_posix(): {"bytes": p.stat().st_size, "sha256": digest(p)}
         for p in paths
     }
+    guide = (ROOT / "docs/SUBMISSION_README.md").read_text(encoding="utf-8-sig").encode("utf-8")
+    records["提交版使用说明.md"] = {"bytes": len(guide), "sha256": hashlib.sha256(guide).hexdigest()}
     code_path = OUT / "code.zip"
     with zipfile.ZipFile(code_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in paths:
@@ -139,7 +139,14 @@ def main() -> None:
         "项目封面.png": "docs/figures/brand_cover.png",
     }
     for target, source in attachments.items():
-        shutil.copyfile(ROOT / source, OUT / target)
+        if target == "项目公开介绍.md":
+            # Outer documentation links point into the separately extracted code/ tree.
+            import re
+            text = (ROOT / source).read_text(encoding="utf-8-sig")
+            text = re.sub(r"\]\((?!https?://|#)([^)]+)\)", r"](code/\1)", text)
+            (OUT / target).write_text(text, encoding="utf-8")
+        else:
+            shutil.copyfile(ROOT / source, OUT / target)
     expected = {"code.zip", "MANIFEST.json", *attachments}
     actual = {p.name for p in OUT.iterdir()}
     if actual - expected:

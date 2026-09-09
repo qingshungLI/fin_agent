@@ -5,7 +5,7 @@
 - `report_frontmatter.tex`：原始品牌封面、贡献总览与封面公式的实现口径说明。
 - `report_innovation.tex`：研究合同、异质性子代、证据反馈三项贡献，以及明确标为待执行的消融方案。
 - `report_results.tex`：停止快照、Core Lab 条件案例、父子区域对照与规律账本。
-- `figures/brand_cover.png`：用户原始封面；`brand_cover.pdf` 为嵌入用静态资源。
+- `figures/brand_cover.png`：LaTeX 重建封面；`brand_cover.pdf` 为嵌入用静态资源。
 - `figures/brand_cover_source.json`：封面来源和 SHA256。报告其余统计图来源见 `figures/sources.json`。
 
 2026-09-09 停止快照为 15 个完成候选、6 个已评估子代，9 个 UNDECIDABLE、6 个 FAIL，独立确认数为 0。Core Lab 截图属于单独证据来源，不合并候选数，也不将训练区域 IC 转为收益改善倍数。

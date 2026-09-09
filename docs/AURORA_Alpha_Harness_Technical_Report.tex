@@ -8,9 +8,9 @@
 \usepackage{amsmath,amssymb,booktabs,longtable,tabularx,array}
 \usepackage{graphicx,xcolor,enumitem,hyperref,listings,fancyhdr,placeins,pdfpages}
 \setmainfont{TeX Gyre Termes}
-\setCJKmainfont[AutoFakeBold=2,AutoFakeSlant=.15]{SimSun}
-\setCJKmonofont[AutoFakeSlant=.15]{Microsoft YaHei}
-\setCJKsansfont{Microsoft YaHei}
+\setCJKmainfont{Noto Serif CJK SC}
+\setCJKmonofont{Noto Sans Mono CJK SC}
+\setCJKsansfont{Noto Sans CJK SC}
 \hypersetup{colorlinks=true,linkcolor=blue!60!black,urlcolor=blue!60!black,citecolor=blue!60!black}
 \definecolor{aurorablue}{HTML}{244B74}
 \definecolor{auroragold}{HTML}{C58A2B}
@@ -307,6 +307,7 @@ fast 的目标是尽快回答“提案、编译、测量、批评、演化、组
 React/Three.js 控制台包含研究队列、运行模式、数据上传、结构卡、进度日志、3D 研究场景、父子血缘、候选表和组合视图。3D 场景的作用是把机制家族、结构形式、代际关系和运行状态可视化，而不是把统计结果装饰成确定结论。前端通过 FastAPI 读取结构化产物，不绕过后端检查直接修改研究状态。
 
 \FloatBarrier
+\input{report_frontend.tex}
 \input{report_results.tex}
 \section{当前实现状态与已知边界}
 截至 2026 年 9 月 9 日，仓库已经实现：
@@ -322,6 +323,7 @@ React/Three.js 控制台包含研究队列、运行模式、数据上传、结�
 当前仍需明确的边界包括：
 \begin{itemize}[leftmargin=2em]
   \item fast 模式不具备正式确认资格；
+  \item 当前确认入口对 reverse / interaction 条件结构的分派仍需修复并验证；不能据此宣称全谱系独立确认已打通；
   \item 研究区间中的数据隔离、行业来源和竞价数据质量仍会影响正式资格；
   \item 自动演化预算是上限，不保证产生同等数量的有效子代；
   \item LLM 是受限研究代理，不是统计检验器；

@@ -1,7 +1,7 @@
 {
-  "source": "D:/download/cover.png",
-  "usage": "User-provided project cover, preserved without text edits",
-  "sha256": "a2f8ba495d219f820827ce2db04507f266fad731aa21793d9263aa6b9108e619",
+  "source": "brand_cover.tex",
+  "usage": "LaTeX-generated cover with exploratory evidence boundaries",
+  "sha256": "4c8d99880b6f884608a5b20e48669c9f87adc8d9dc49ddb5e227c3682d333748",
   "size_pixels": [
     1920,
     1080
