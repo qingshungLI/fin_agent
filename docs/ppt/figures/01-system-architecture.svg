@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="1152pt" height="460.8pt" viewBox="0 0 1152 460.8" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-09-09T16:32:28.993825</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.9, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 460.8
+L 1152 460.8
+L 1152 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 34.74 85.644
+L 1117.26 85.644
+L 1117.26 177.984
+L 34.74 177.984
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #f7faf9; stroke: #b8cdcc; stroke-width: 0.85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 170.928 117.792
+L 404.892 117.792
+L 404.892 162.252
+L 170.928 162.252
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 457.272 117.792
+L 691.236 117.792
+L 691.236 162.252
+L 457.272 162.252
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 743.616 117.792
+L 977.58 117.792
+L 977.58 162.252
+L 743.616 162.252
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 34.74 195.084
+L 1117.26 195.084
+L 1117.26 321.624
+L 34.74 321.624
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #f7faf9; stroke: #b8cdcc; stroke-width: 0.85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 55.692 232.704
+L 230.292 232.704
+L 230.292 303.156
+L 55.692 303.156
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 272.196 232.704
+L 446.796 232.704
+L 446.796 303.156
+L 272.196 303.156
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 488.7 232.704
+L 663.3 232.704
+L 663.3 303.156
+L 488.7 303.156
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #153b40; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 705.204 232.704
+L 879.804 232.704
+L 879.804 303.156
+L 705.204 303.156
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 921.708 232.704
+L 1096.308 232.704
+L 1096.308 303.156
+L 921.708 303.156
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 232.289499 268.272
+Q 250.744794 268.272 267.690744 268.272
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 262.490744 265.672
+L 267.690744 268.272
+L 262.490744 270.872
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 448.793499 268.272
+Q 467.248794 268.272 484.194744 268.272
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 478.994744 265.672
+L 484.194744 268.272
+L 478.994744 270.872
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 665.297499 268.272
+Q 683.752794 268.272 700.698744 268.272
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 695.498744 265.672
+L 700.698744 268.272
+L 695.498744 270.872
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 881.801499 268.272
+Q 900.256794 268.272 917.202744 268.272
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 912.002744 265.672
+L 917.202744 268.272
+L 912.002744 270.872
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 284.165435 163.581675
+Q 320.710001 196.119011 356.127284 227.652674
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 353.972495 222.252963
+L 356.127284 227.652674
+L 350.514641 226.136678
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_17">
+    <path d="M 790.597829 230.055807
+Q 684.73151 196.943976 580.30572 164.282701
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 584.492508 168.316409
+L 580.30572 164.282701
+L 586.044759 163.353495
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_18">
+    <path d="M 111.564 352.404
+L 411.876 352.404
+L 411.876 407.124
+L 111.564 407.124
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #153b40; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_19">
+    <path d="M 481.716 352.404
+L 782.028 352.404
+L 782.028 407.124
+L 481.716 407.124
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_20">
+    <path d="M 755.715661 304.561761
+Q 695.194101 327.94194 636.080481 350.778215
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke-dasharray: 4.995,2.16; stroke-dashoffset: 0; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 641.868045 351.329676
+L 636.080481 350.778215
+L 639.994188 346.479041
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke-dasharray: 4.995,2.16; stroke-dashoffset: 0; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_21">
+    <path d="M 479.716796 379.764
+Q 447.297392 379.764 416.387334 379.764
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke-dasharray: 4.995,2.16; stroke-dashoffset: 0; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 421.587334 382.364
+L 416.387334 379.764
+L 421.587334 377.164
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke-dasharray: 4.995,2.16; stroke-dashoffset: 0; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_22">
+    <path d="M 249.516969 351.459931
+Q 292.708718 328.356969 334.569554 305.965903
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke-dasharray: 4.995,2.16; stroke-dashoffset: 0; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 328.757979 306.125897
+L 334.569554 305.965903
+L 331.210603 310.711159
+z
+" clip-path="url(#pdf53cc249d)" style="fill: #258f86; stroke-dasharray: 4.995,2.16; stroke-dashoffset: 0; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 34.74 63.072
+L 1117.26 63.072
+" clip-path="url(#pdf53cc249d)" style="fill: none; stroke: #b8cdcc; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #153b40" x="34.74" y="43.276125" transform="rotate(-0 34.74 43.276125)">图 1  |  AURORA：机制驱动的研究架构</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 9.5px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #587173" x="34.74" y="437.100211" transform="rotate(-0 34.74 437.100211)">实线：计算与证据传递   ·   虚线：训练线索驱动的新任务   ·   B/H 确认有独立准入；SDK 使用独立实验协议。</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #587173" x="47.3112" y="104.981438" transform="rotate(-0 47.3112 104.981438)">(a) 研究接口与产物消费</text>
+   </g>
+   <g id="text_4">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="287.91" y="142.4325" transform="rotate(-0 287.91 142.4325)">研究 CLI</text>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="574.254" y="142.4325" transform="rotate(-0 574.254 142.4325)">控制台与 API</text>
+   </g>
+   <g id="text_6">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="860.598" y="142.4325" transform="rotate(-0 860.598 142.4325)">自有数据 SDK</text>
+   </g>
+   <g id="text_7">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #587173" x="47.3112" y="214.421438" transform="rotate(-0 47.3112 214.421438)">(b) 完整引擎：冻结后执行</text>
+   </g>
+   <g id="text_8">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="142.992" y="257.3445" transform="rotate(-0 142.992 257.3445)">数据平面</text>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="142.992" y="285.557438" transform="rotate(-0 142.992 285.557438)">历史字段与标签分离</text>
+   </g>
+   <g id="text_10">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="359.496" y="257.3445" transform="rotate(-0 359.496 257.3445)">研究合同</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="359.496" y="285.557438" transform="rotate(-0 359.496 285.557438)">机制 / 表达式 / 断言</text>
+   </g>
+   <g id="text_12">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #ffffff" x="576" y="257.3445" transform="rotate(-0 576 257.3445)">确定性执行</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #d6ebe4" x="576" y="285.557438" transform="rotate(-0 576 285.557438)">测量 / 检验 / 条件发现</text>
+   </g>
+   <g id="text_14">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="792.504" y="257.3445" transform="rotate(-0 792.504 257.3445)">研究证据</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="792.504" y="285.557438" transform="rotate(-0 792.504 285.557438)">结果 / 断言 / 版本身份</text>
+   </g>
+   <g id="text_16">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="1009.008" y="257.3445" transform="rotate(-0 1009.008 257.3445)">独立确认</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="1009.008" y="285.557438" transform="rotate(-0 1009.008 285.557438)">冻结批次 / 准入审计</text>
+   </g>
+   <g id="text_18">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #ffffff" x="261.72" y="377.0445" transform="rotate(-0 261.72 377.0445)">训练证据 → 子代合同</text>
+   </g>
+   <g id="text_19">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="631.872" y="377.0445" transform="rotate(-0 631.872 377.0445)">研究记忆 → 有界队列</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 11px; font-family: 'Microsoft YaHei'; fill: #153b40" transform="translate(882.248 369.310156)">贯穿治理</text>
+    <text style="font-size: 11px; font-family: 'Microsoft YaHei'; fill: #153b40" transform="translate(845.588781 382.596438)">角色边界 · 哈希 · 检查点</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pdf53cc249d">
+   <rect x="17.28" y="13.824" width="1117.44" height="437.76"/>
+  </clipPath>
+ </defs>
+</svg>

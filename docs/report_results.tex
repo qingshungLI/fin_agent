@@ -1,6 +1,7 @@
 \section{阶段性成果与证据分级}
+\label{sec:results}
 \subsection{两组来源，各自保留验证口径}
-本报告纳入两组已提供证据。第一组为仓库归档的 2026-09-09 A 段 fast 研究快照，来源是 \code{docs/research/2026-09-09-results.json}；第二组为用户提供的 Core Lab 截图，位于 \code{report/}。两者的候选命名、样本长度与统计口径不同，\important{不合并候选总数、不拼接收益、不声称同一次运行}。截图体现研究方法的阶段性应用，其原始数据与可执行日志尚未随图提供。
+本报告纳入两组已提供证据。第一组为仓库归档的 2026-09-09 A 段 fast 研究快照，来源是 \path{docs/research/2026-09-09-results.json}；第二组为用户提供的 Core Lab 截图，位于 \code{report/}。两者的候选命名、样本长度与统计口径不同，\important{不合并候选总数、不拼接收益、不声称同一次运行}。截图体现研究方法的阶段性应用，其原始数据与可执行日志尚未随图提供。
 
 \begin{table}[ht]
 \centering\small
@@ -52,11 +53,45 @@ data5 & 0.159068 & 1.739080 & 9 & 566 \\
 \caption{案例复核值，来源为 factor\_1.png；极短窗口与选择后统计限制其解释范围。}
 \end{table}
 
-\subsection{规律账本：把筛选结果反馈为下一轮合同}
-\code{factor\_2.png} 的发现后机制解释将该区域描述为消息含义与交易状态/关注结构的交互，并指出它适合作为下一轮 root 合同，而不是事前先验或独立因果结论。\code{law.png} 同时记录 drop 与 observe：例如训练/验证方向翻转、横向强度不足、样本可交易性不足，均有对应理由。
+\subsection{案例拆解：从一个信号到一个可检验的状态假设}
+\label{sec:case-contract}
+\textbf{研究对象。}Core Lab 截图中的 \code{CORE170-8EB14F14ED32} 使用消息前一日跳空字段 \code{pre\_gap\_1d}，冻结正方向与 3 日周期。以下按原图字段名解释；其消息时间戳和字段构造仍需原始数据核对。
 
-这种记录具有研究价值：失败并非从排行榜消失，而是以边界条件和证据冲突回到下一轮调度。截图里的 promote 表示继续研究的筛选动作，不等于正式 PASS。截图自身也注明 repeated-split 非独立 OOS，以及 CAR、候选内 R-learner 需后续补充；报告沿用这些限制。
+\begin{table}[ht]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}p{.16\textwidth}Xp{.25\textwidth}@{}}
+\toprule
+\textbf{合同要素} & \textbf{截图中的内容} & \textbf{研究含义}\\
+\midrule
+基础信号 & \code{pre\_gap\_1d}；正向；3 日周期 & 固定解释对象、方向与周期\\
+条件一 & 换手异常相对市场位次 $\leq q_{0.80}$，图示切点 0.8094 & 排除该变量的最高分位区域；不等于只保留低换手股票\\
+条件二 & 五日收益相对历史位次 $>q_{0.80}$，图示切点 0.9 & 叠加较高历史位次的短期收益状态\\
+谱系 & 第一轮搜索，累计两项 gate，直接父层为基础信号 & 条件组合成为独立记录的新候选\\
+\bottomrule
+\end{tabularx}
+\caption{由 factor\_1.png 拆解的候选合同。分位水平与具体切点分别保留，不把 q0.80 直接替换成字段值 0.80。}
+\end{table}
 
+\textbf{观察到的异质性。}截图列示父结构 IC 为 0.0210019，条件子结构 IC 为 0.149155，其余区域为 0.0158302。它提示效应可能集中在所选区域，支持提出更具体的下一轮假设。由于区域覆盖和样本组成变化，该对照不能解释为同样本上的收益提升，也不能把两项条件各自的贡献分离出来。
+
+\textbf{验证如何改变研究判断。}验证段 IC 为 0.0793042，方向保持正向，但只有 9 个交易日、HAC $t=0.904779$。因此下一步应检验方向和条件的持续性。图中 data2--data5 可展示对不同切分的敏感性；它们不是四次独立确认，不能累计为成功复现次数。
+
+\textbf{研究记忆如何接续。}\code{factor\_2.png} 将发现后解释明确登记为下一轮 root 合同：关注跳空信号与交易状态的交互，而不是把事后描述回写为原先就知道的机制。该截图保留了候选内投票与筛选条件；5/5 票属于其筛选统计，不是五个独立模型或五次独立实验。
+
+\begin{center}
+\setlength{\fboxsep}{9pt}
+\fcolorbox{aurorablue!25}{codegray}{\begin{minipage}{.92\textwidth}
+\textcolor{aurorablue}{\textbf{案例所展示的方法价值}}\\[0.3em]
+基础信号 $\rightarrow$ 两项状态条件 $\rightarrow$ 区域与父子对照 $\rightarrow$ 短窗口复核 $\rightarrow$ 下一轮候选合同。\\
+研究产物同时回答“测了什么”“条件如何形成”和“还需要验证什么”。
+\end{minipage}}
+\end{center}
+
+\subsection{反例同样进入研究资产}
+\code{law.png} 中同时出现 drop 和 observe，原因包括训练／验证方向翻转、横向强度不足及样本或可交易性不足。某些候选相对父层有增量，仍因方向冲突被剔除；这说明父子增量只是证据的一部分。
+
+对演示而言，可将条件案例与一条方向翻转记录并列：前者展示新问题如何产生，后者展示继续探索为何被限制。保留这种对照，有助于评审理解系统如何在支持证据与反例之间做研究取舍。截图中的 promote 表示继续研究；CAR 与候选内 R-learner 尚需补充，全量生成过程仍需原始日志复现。
+\FloatBarrier
 \begin{figure}[p]
 \centering
 \includegraphics[width=\textwidth,height=.36\textheight,keepaspectratio]{../report/all_factor_show.png}

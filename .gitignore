@@ -40,3 +40,12 @@ scratch_diagnose_*.py
 
 *.synctex.gz
 
+
+# Local slide renders and superseded aliases; canonical deck remains tracked.
+docs/ppt/preview-*.png
+docs/ppt/architecture-*.png
+docs/ppt/powerpoint-preview/
+docs/ppt/AURORA_比赛简版.*
+docs/ppt/AURORA_项目架构.*
+docs/ppt/AURORA_原生模块编辑版.pptx
+~$*

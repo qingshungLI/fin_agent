@@ -6,7 +6,7 @@
 \usepackage{fontspec}
 \usepackage{xeCJK}
 \usepackage{amsmath,amssymb,booktabs,longtable,tabularx,array}
-\usepackage{graphicx,xcolor,enumitem,hyperref,listings,fancyhdr,placeins}
+\usepackage{graphicx,xcolor,enumitem,hyperref,listings,fancyhdr,placeins,pdfpages}
 \setmainfont{TeX Gyre Termes}
 \setCJKmainfont[AutoFakeBold=2,AutoFakeSlant=.15]{SimSun}
 \setCJKmonofont[AutoFakeSlant=.15]{Microsoft YaHei}
@@ -21,7 +21,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \lhead{AURORA Alpha Harness}
-\rhead{RSI Alpha Research}
+\rhead{机制驱动 · 证据可追溯}
 \cfoot{\thepage}
 \newcommand{\systemname}{AURORA Alpha Harness}
 \newcommand{\rsi}{Recursive Self-Improvement (RSI)}
@@ -29,22 +29,17 @@
 \newcommand{\important}[1]{\textbf{#1}}
 
 \title{\vspace{-1.2cm}\textcolor{aurorablue}{\Huge AURORA Alpha Harness}\\[0.3em]
-\Large 面向递归自我改进的可审计 Alpha 研究系统技术报告}
-\author{AutoAlpha Research Team}
+\Large 可审计的自演化量化研究智能体技术报告}
+\author{AURORA Research Team}
 \date{2026 年 9 月 9 日}
 
+\renewcommand{\contentsname}{目录}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\setcounter{tocdepth}{1}
+\hypersetup{pdftitle={AURORA Alpha Harness：可审计的自演化量化研究智能体},pdfsubject={机制合同、异质性演化与证据反馈},pdfauthor={AURORA Research Team}}
 \begin{document}
-\maketitle
-\begin{center}
-\large\textcolor{auroragold}{\textbf{AURORA = Auditable Unified Recursive Optimization and Research Architecture}}\\
-\normalsize AURORA 中的 RSI 指 Recursive Self-Improvement，而不是 Relative Strength Index。
-\end{center}
-\vspace{0.4em}
-\begin{abstract}
-AURORA Alpha Harness 是一个将大语言模型、量化因子研究、统计验证和实验审计组合起来的研究基础设施。系统的核心对象不是单个收益率最高的表达式，而是一个可复现的研究过程：AI 提出机制假设，受限 DSL 将假设编译为可执行因子，冻结数据切分、成本和断言，运行测量与证伪检验，再根据结构化证据生成下一代研究任务。每一次迭代都绑定父结构、预算、数据哈希、代码哈希和结果状态，因此研究方法可以递归改进，同时不会获得修改评估器、读取未来数据或把未知结果伪装成通过的权限。
-
-本文描述当前仓库中的完整架构，包括数据平面、结构目录、因子 DSL、研究流水线、honest R-learning 浅森林、自动演化队列、DeepSeek 角色防火墙、审计与恢复、组合 gate、企业 SDK 及 3D 控制台。报告也区分正式配置与 fast 配置：fast 用于快速验证 RSI 工程闭环，不具有正式确认资格。
-\end{abstract}
+\input{report_frontmatter.tex}
 
 \tableofcontents
 \newpage
@@ -69,6 +64,8 @@ AURORA Alpha Harness 是一个将大语言模型、量化因子研究、统计�
   \item[Control panel] 前端展示研究队列、父子血缘、森林发现、组合 gate、耗时和失败原因，适合现场演示与运维。
 \end{description}
 
+\clearpage
+\input{report_innovation.tex}
 \section{总体架构}
 \subsection{分层设计}
 系统由六个相互隔离但通过机器可读产物连接的层组成：

@@ -1,3 +1,5 @@
+"""增量更新管线：核对行情就绪状态、拉取最近交易日、按年合并并重建视图。分区目录不能隐式改变合并列集合，新记录按主键覆盖旧记录。"""
+
 from __future__ import annotations
 
 import os
@@ -27,6 +29,14 @@ def _ready(result) -> bool:
 
 
 def _upsert_year(frame: pd.DataFrame, year: int) -> Path:
+    """按主键覆盖一个年度分区，假设输入字段与已有分区一致。
+
+    Args:
+        frame: 含 date、order_book_id 的同年度行情表。
+        year: 目标分区年份。
+    Returns:
+        Path: 已原子更新并写入元数据的 Parquet 路径。
+    """
     target = STD_ROOT / "daily_bar" / f"year={year}" / "data.parquet"
     target.parent.mkdir(parents=True, exist_ok=True)
     incoming = STATE_ROOT / f"daily_update_{year}.parquet"
@@ -34,20 +44,22 @@ def _upsert_year(frame: pd.DataFrame, year: int) -> Path:
     temp = target.with_name(".data.parquet.update")
     con = duckdb.connect()
     try:
+        temp_sql = str(temp).replace("'", "''")
         incoming_sql = str(incoming).replace("'", "''")
+        # 年份来自目录；关闭 Hive 推断，避免旧分区多出 year 列导致 UNION 列数不一致。
         if target.exists():
             target_sql = str(target).replace("'", "''")
             source = (
-                f"SELECT *, 1 AS _priority FROM read_parquet('{target_sql}') "
-                f"UNION ALL SELECT *, 2 AS _priority FROM read_parquet('{incoming_sql}')"
+                f"SELECT *, 1 AS _priority FROM read_parquet('{target_sql}', hive_partitioning=false) "
+                f"UNION ALL SELECT *, 2 AS _priority FROM read_parquet('{incoming_sql}', hive_partitioning=false)"
             )
         else:
-            source = f"SELECT *, 2 AS _priority FROM read_parquet('{incoming_sql}')"
+            source = f"SELECT *, 2 AS _priority FROM read_parquet('{incoming_sql}', hive_partitioning=false)"
         con.execute(
             f"COPY (SELECT * EXCLUDE(_priority) FROM ({source}) "
             "QUALIFY row_number() OVER (PARTITION BY date, order_book_id ORDER BY _priority DESC)=1 "
             "ORDER BY date, order_book_id) "
-            f"TO '{str(temp).replace("'", "''")}' (FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 3)"
+            f"TO '{temp_sql}' (FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 3)"
         )
     finally:
         con.close()

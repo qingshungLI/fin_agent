@@ -1,3 +1,5 @@
+"""历史迁移管线：合并旧 CSV、按年写入去重 Parquet，行数核对成功后才移除源 CSV。迁移不是研究入口，调用前应确认目标数据目录。"""
+
 from __future__ import annotations
 
 import os
@@ -13,7 +15,11 @@ def _valid_csv_files(directory: Path) -> list[Path]:
 
 
 def migrate_and_delete() -> dict:
-    """合并两套旧 CSV 为去重 Parquet；严格校验成功后删除 CSV。"""
+    """迁移配置目录中的两套旧 CSV，无参数，核对行数后才删除源文件。
+
+    Returns:
+        dict: 迁移状态、输入行数、唯一行数和已删除文件数。
+    """
     sources = [PROJECT_ROOT / "cache" / "per_stock_csv", PROJECT_ROOT / "cache" / "per_stock_csv_rebuild"]
     files = [p for source in sources for p in _valid_csv_files(source)]
     if not files:
@@ -44,6 +50,7 @@ def migrate_and_delete() -> dict:
             directory.mkdir(parents=True, exist_ok=True)
             target = directory / "data.parquet"
             temp = directory / ".data.parquet.tmp"
+            temp_sql = str(temp).replace("'", "''")
             con.execute(
                 f"""COPY (
                     SELECT * EXCLUDE(filename, source_priority)
@@ -53,12 +60,17 @@ def migrate_and_delete() -> dict:
                       PARTITION BY CAST(date AS DATE), order_book_id ORDER BY source_priority DESC
                     )=1
                     ORDER BY CAST(date AS DATE), order_book_id
-                ) TO '{str(temp).replace("'", "''")}'
+                ) TO '{temp_sql}'
                 (FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 3)"""
             )
             os.replace(temp, target)
             written.append(target)
-        parquet_rows = sum(con.execute(f"SELECT count(*) FROM read_parquet('{str(p).replace("'", "''")}')").fetchone()[0] for p in written)
+        parquet_rows = 0
+        for path in written:
+            path_sql = str(path).replace("'", "''")
+            parquet_rows += con.execute(
+                f"SELECT count(*) FROM read_parquet('{path_sql}')"
+            ).fetchone()[0]
         if parquet_rows != unique_rows or parquet_rows <= 0:
             raise RuntimeError(f"CSV 迁移校验失败：唯一行 {unique_rows}，Parquet 行 {parquet_rows}")
     finally:

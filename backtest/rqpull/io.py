@@ -1,3 +1,5 @@
+"""数据落盘管线：规范化 API 表格、写入暂存 Parquet、去重合并并记录分区元数据。SQL 路径先转义再插值，以兼容 Python 3.11 并保留含引号的目录。"""
+
 from __future__ import annotations
 
 import hashlib
@@ -84,6 +86,16 @@ def stage_write(frame, task: str, chunk_id: str, year: int | None = None, month:
 
 
 def merge_partition(task: str, year: int, primary_key: tuple[str, ...], month: int | None = None) -> Path | None:
+    """合并暂存文件并按可信主键去重，假设主键来自内置任务配置。
+
+    Args:
+        task: 数据任务名称。
+        year: 分区年份。
+        primary_key: 去重和排序字段。
+        month: 可选月份分区。
+    Returns:
+        Path | None: 已写入分区；无输入文件时返回 None。
+    """
     import duckdb
 
     raw_dir = RAW_ROOT / task / f"year={year:04d}"
@@ -97,6 +109,7 @@ def merge_partition(task: str, year: int, primary_key: tuple[str, ...], month: i
     std_dir.mkdir(parents=True, exist_ok=True)
     output = std_dir / "data.parquet"
     temp = std_dir / ".data.parquet.tmp"
+    temp_sql = str(temp).replace("'", "''")
     file_sql = "[" + ",".join("'" + str(p).replace("'", "''") + "'" for p in files) + "]"
     keys = ", ".join(f'"{key}"' for key in primary_key)
     con = duckdb.connect()
@@ -104,7 +117,7 @@ def merge_partition(task: str, year: int, primary_key: tuple[str, ...], month: i
         con.execute(
             f"COPY (SELECT * FROM read_parquet({file_sql}, union_by_name=true) "
             f"QUALIFY row_number() OVER (PARTITION BY {keys} ORDER BY {keys}) = 1 "
-            f"ORDER BY {keys}) TO '{str(temp).replace("'", "''")}' "
+            f"ORDER BY {keys}) TO '{temp_sql}' "
             f"(FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 3)"
         )
     finally:

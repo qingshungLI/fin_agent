@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="1152pt" height="460.8pt" viewBox="0 0 1152 460.8" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-09-09T16:32:29.395491</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.9, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 460.8
+L 1152 460.8
+L 1152 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 34.74 87.696
+L 726.156 87.696
+L 726.156 351.036
+L 34.74 351.036
+z
+" clip-path="url(#pccb46124c2)" style="fill: #f7faf9; stroke: #b8cdcc; stroke-width: 0.85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 747.108 87.696
+L 1117.26 87.696
+L 1117.26 351.036
+L 747.108 351.036
+z
+" clip-path="url(#pccb46124c2)" style="fill: #f7faf9; stroke: #b8cdcc; stroke-width: 0.85; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 62.676 142.416
+L 254.736 142.416
+L 254.736 227.916
+L 62.676 227.916
+z
+" clip-path="url(#pccb46124c2)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 282.672 142.416
+L 474.732 142.416
+L 474.732 227.916
+L 282.672 227.916
+z
+" clip-path="url(#pccb46124c2)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 502.668 142.416
+L 694.728 142.416
+L 694.728 227.916
+L 502.668 227.916
+z
+" clip-path="url(#pccb46124c2)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 256.737762 184.824
+Q 268.205874 184.824 278.164641 184.824
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 272.964641 182.224
+L 278.164641 184.824
+L 272.964641 187.424
+z
+" clip-path="url(#pccb46124c2)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 476.733762 184.824
+Q 488.201874 184.824 498.160641 184.824
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 492.960641 182.224
+L 498.160641 184.824
+L 492.960641 187.424
+z
+" clip-path="url(#pccb46124c2)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 94.104 258.012
+L 310.608 258.012
+L 310.608 326.412
+L 94.104 326.412
+z
+" clip-path="url(#pccb46124c2)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 408.384 258.012
+L 670.284 258.012
+L 670.284 326.412
+L 408.384 326.412
+z
+" clip-path="url(#pccb46124c2)" style="fill: #153b40; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 598.657718 228.821599
+Q 571.206037 242.738885 545.100579 255.973671
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 550.914266 255.941326
+L 545.100579 255.973671
+L 548.562915 251.303315
+z
+" clip-path="url(#pccb46124c2)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 312.610188 290.844
+Q 358.996244 290.844 403.872954 290.844
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 398.672954 288.244
+L 403.872954 290.844
+L 398.672954 293.444
+z
+" clip-path="url(#pccb46124c2)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 782.028 142.416
+L 1082.34 142.416
+L 1082.34 217.656
+L 782.028 217.656
+z
+" clip-path="url(#pccb46124c2)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 782.028 251.856
+L 1082.34 251.856
+L 1082.34 327.096
+L 782.028 327.096
+z
+" clip-path="url(#pccb46124c2)" style="fill: #e9f4f0; stroke: #258f86; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 671.76908 288.132005
+Q 725.088862 239.877708 777.28954 192.636196
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 771.689382 194.197679
+L 777.28954 192.636196
+L 775.178632 198.053212
+z
+" clip-path="url(#pccb46124c2)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 932.184 219.655731
+Q 932.184 234.256305 932.184 247.347532
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+    <path d="M 934.784 242.147532
+L 932.184 247.347532
+L 929.584 242.147532
+z
+" clip-path="url(#pccb46124c2)" style="fill: #258f86; stroke: #258f86; stroke-width: 1.35; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 34.74 63.072
+L 1117.26 63.072
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #b8cdcc; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 66.168 379.764
+L 1085.832 379.764
+" clip-path="url(#pccb46124c2)" style="fill: none; stroke: #b8cdcc; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #153b40" x="34.74" y="43.330812" transform="rotate(-0 34.74 43.330812)">图 2  |  按职责限制输入的模型协作</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 9.5px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #587173" x="34.74" y="437.100211" transform="rotate(-0 34.74 437.100211)">六类角色共享模型；字段白名单约束上下文。盲下注用于实验性诊断，结果核对不能改写确定性测量。</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #587173" x="47.3112" y="107.033438" transform="rotate(-0 47.3112 107.033438)">(a) 假设构造、事前预期与冻结执行</text>
+   </g>
+   <g id="text_4">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #587173" x="759.6792" y="107.033438" transform="rotate(-0 759.6792 107.033438)">(b) 测量后：消费获准的证据</text>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="158.706" y="167.500875" transform="rotate(-0 158.706 167.500875)">提案 proposer</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; fill: #587173" transform="translate(116.505844 195.269438)">坐标 / 词表 / 约束</text>
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; fill: #587173" transform="translate(127.206 210.469828)">输出机制假设</text>
+   </g>
+   <g id="text_7">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="378.702" y="167.0565" transform="rotate(-0 378.702 167.0565)">操作化</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; fill: #587173" transform="translate(336.501844 195.269438)">字段 / 算子 / 量纲</text>
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; fill: #587173" transform="translate(352.452 210.469828)">输出表达式</text>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="598.698" y="167.0565" transform="rotate(-0 598.698 167.0565)">审查 reviewer</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; fill: #587173" transform="translate(551.247844 195.269438)">机制 / 断言 / 表达式</text>
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; fill: #587173" transform="translate(556.698 210.469828)">检查逻辑与可测性</text>
+   </g>
+   <g id="text_11">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="202.356" y="282.6525" transform="rotate(-0 202.356 282.6525)">盲下注 bettor</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="202.356" y="310.865438" transform="rotate(-0 202.356 310.865438)">冻结断言概率</text>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #ffffff" x="539.334" y="282.6525" transform="rotate(-0 539.334 282.6525)">冻结 → 确定性测量</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #d6ebe4" x="539.334" y="310.865438" transform="rotate(-0 539.334 310.865438)">代码产生数值与断言状态</text>
+   </g>
+   <g id="text_15">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="932.184" y="167.0565" transform="rotate(-0 932.184 167.0565)">核对 reconciler</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="932.184" y="195.269438" transform="rotate(-0 932.184 195.269438)">确定性断言结果 → 分类记录</text>
+   </g>
+   <g id="text_17">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #153b40" x="932.184" y="276.4965" transform="rotate(-0 932.184 276.4965)">归纳 inducer</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 10.5px; font-family: 'Microsoft YaHei'; text-anchor: middle; fill: #587173" x="932.184" y="304.709438" transform="rotate(-0 932.184 304.709438)">规律 / 研究后验 → 后续线索</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 11px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #258f86" x="73.152" y="400.284" transform="rotate(-0 73.152 400.284)">提案与盲下注：不接收原始收益或 B/H 观测</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 11px; font-family: 'Microsoft YaHei'; text-anchor: start; fill: #258f86" x="656.316" y="400.284" transform="rotate(-0 656.316 400.284)">结果后解释：不能回写成事前先验</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pccb46124c2">
+   <rect x="17.28" y="13.824" width="1117.44" height="437.76"/>
+  </clipPath>
+ </defs>
+</svg>
