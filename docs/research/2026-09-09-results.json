@@ -1,22 +1,22 @@
 {
   "snapshot_date": "2026-09-09",
   "code_commit": "752d9d7c2e376942045b37f8b46c0cee1b552ecc",
-  "status_at_snapshot": "research_in_progress",
-  "attempts_checkpoint": 13,
+  "status_at_snapshot": "stopped_by_user",
+  "attempts_checkpoint": 20,
   "attempt_limit": 210,
-  "completed_candidates": 11,
+  "completed_candidates": 15,
   "verdict_counts": {
-    "UNDECIDABLE": 6,
-    "FAIL": 5
+    "UNDECIDABLE": 9,
+    "FAIL": 6
   },
   "evolution": {
-    "child_comparisons": 0,
-    "children_measured": 0,
-    "components": 0,
+    "child_comparisons": 6,
+    "children_measured": 6,
+    "components": 15,
     "conditional_rules": 0,
     "independent_confirmed": 0,
     "objective": "heterogeneity_and_evolution",
-    "reverse_candidates": 0
+    "reverse_candidates": 2
   },
   "scope": {
     "segment": "A exploration only",
@@ -1422,6 +1422,514 @@
         ]
       },
       "source_result_sha256": "9cc589b078d72c905d9db57de32f0757bba8467dd2732051f56b3209d809feef"
+    },
+    {
+      "candidate": "C012",
+      "name": "收益-波动背离的库存出清反转",
+      "family": "M2",
+      "form": 5,
+      "specification": {
+        "operational": [
+          "neg(sub(xs_rank(ret_1d), xs_rank(realized_vol)))",
+          "neg(sub(xs_z(ret_1d), xs_z(realized_vol)))",
+          "neg(sub(ts_z(ret_1d, 20), ts_z(realized_vol, 20)))"
+        ],
+        "coverage": "in_pool",
+        "primary_horizon": 5,
+        "mechanism": "以ret_1d度量T日个股的方向性单日价格变化，以realized_vol度量其自身近期的价格波动基准。若ret_1d显著偏离realized_vol所能解释的常规区间（即ret_1d高而realized_vol低），该涨幅中更大比例来自订单流暂时性冲击而非信息成分；流动性提供者在出清该方向性订单后形成超过目标的库存，需在未来数个交易日通过库存出清释放，从而使价格向基本面收敛。为此，按ret_1d与realized_vol的背离程度（ret_1d高且realized_vol低）从高到低分组，取方向为-1后，高背离组未来1-5日收益应显著更低并呈单调关系；若不成立，则说明收益-波动背离并不代表更强的临时冲击，机制被否定。"
+      },
+      "lineage": {
+        "operator": "horizontal",
+        "parent": "C002",
+        "depth": 1
+      },
+      "proposal_origin": "llm_prior",
+      "verdict": "UNDECIDABLE",
+      "research_role": {
+        "formal": false,
+        "reverse_candidate": false,
+        "role": "unresolved_component",
+        "single_cell_alpha_required": false,
+        "training_rules": 0
+      },
+      "primary_ic": {
+        "mean": -0.008187059822508884,
+        "ci_low": -0.01576822209953592,
+        "ci_high": -0.0003480257787572772,
+        "days": 1432,
+        "p": 0.9900990099009901,
+        "p_negative": 0.019801980198019802,
+        "horizon": 5,
+        "expression": 1
+      },
+      "discovery": {
+        "scope": "A_internal_only",
+        "p_median": 0.5792044269236393,
+        "split_count": 40,
+        "training_rules": [],
+        "selection_frequency": {
+          "amihud_pct": 0.0,
+          "avg_trade_size_pct": 1.0,
+          "market_cap_pct": 0.0,
+          "realized_vol_pct": 0.0,
+          "turnover_today_pct": 0.0
+        }
+      },
+      "directionality": {
+        "ic": {
+          "training_mean": -0.010360804762352559,
+          "validation_mean": -0.004853389899743525,
+          "two_sided_training_p": 0.07920792079207921,
+          "reverse_candidate": false
+        },
+        "raw_spread": {
+          "training_mean": -0.0017334981639943923,
+          "validation_mean": -0.0008527001644045222,
+          "two_sided_training_p": 0.1188118811881188,
+          "reverse_candidate": false
+        }
+      },
+      "assertions": [
+        {
+          "id": "P1",
+          "kind": "shape",
+          "subject": "dose_shape",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.039603960396039604
+        },
+        {
+          "id": "P2",
+          "kind": "peak",
+          "subject": "peak_horizon",
+          "state": "untested",
+          "p_support": 0.0297029702970297,
+          "p_contradiction": 1.0
+        },
+        {
+          "id": "P3",
+          "kind": "sign",
+          "subject": "effect_sign",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.0297029702970297
+        },
+        {
+          "id": "P4",
+          "kind": "side",
+          "subject": "amihud_pct",
+          "state": "untested",
+          "p_support": 0.09900990099009901,
+          "p_contradiction": 0.9108910891089109
+        },
+        {
+          "id": "P5",
+          "kind": "side",
+          "subject": "market_cap_pct",
+          "state": "untested",
+          "p_support": 0.7722772277227723,
+          "p_contradiction": 0.2376237623762376
+        }
+      ],
+      "placebo": {
+        "profile": "fast",
+        "state": "untested",
+        "tests": [
+          {
+            "kind": "within_day",
+            "alternative": "two_sided_absolute_mean_ic",
+            "observed": -0.006005385985028177,
+            "p": 0.05,
+            "state": "fail"
+          }
+        ],
+        "skipped_tests": [
+          "time_shift",
+          "iaaft"
+        ]
+      },
+      "source_result_sha256": "5f426d433de2591599affb64100dfb63a6c5480b538d3bb7edf11f2bd1ce40f7"
+    },
+    {
+      "candidate": "C013",
+      "name": "截面相对5日收益慢扩散",
+      "family": "M4",
+      "form": 4,
+      "specification": {
+        "operational": [
+          "xs_rank(sub(ret_5d, industry_mean(ret_5d)))",
+          "xs_z(sub(ret_5d, industry_mean(ret_5d)))",
+          "xs_rank(sub(ts_mean(ret_5d, 3), industry_mean(ts_mean(ret_5d, 3))))"
+        ],
+        "coverage": "in_pool",
+        "primary_horizon": 5,
+        "mechanism": "T日收盘时计算的个股过去5日收益相对全市场截面水平的高低，刻画尚未被充分处理的相对信息量。limited_attention_inst拥有有限的处理容量，无法在同一时刻对全部A股的5日价格信息一视同仁地完成更新，因此该截面相对收益中隐含的公司/行业信息在T日收盘仍处于underreaction状态；其后通过同行比较（peer_diffusion），资金会逐步补充定价。故机制预测：截面相对收益高的股票（ret_5d相对截面偏高）在T+3至T+10日收益更高。可证伪条件：在所有T日固定后，对ret_5d做截面排序形成的相对信号，其未来收益分组必须随信号分位单调递增；若相对化处理消除该关系，则该机制被证伪。"
+      },
+      "lineage": {
+        "operator": "seed",
+        "parent": null,
+        "depth": 0
+      },
+      "proposal_origin": "llm_prior",
+      "verdict": "FAIL",
+      "research_role": {
+        "formal": false,
+        "reverse_candidate": true,
+        "role": "reverse_component",
+        "single_cell_alpha_required": false,
+        "training_rules": 0
+      },
+      "primary_ic": {
+        "mean": -0.02607980295922303,
+        "ci_low": -0.03360660635409961,
+        "ci_high": -0.018552999564346452,
+        "days": 1447,
+        "p": 1.0,
+        "p_negative": 0.009900990099009901,
+        "horizon": 5,
+        "expression": 1
+      },
+      "discovery": {
+        "scope": "A_internal_only",
+        "p_median": 1.0,
+        "split_count": 40,
+        "training_rules": [],
+        "selection_frequency": {
+          "amihud_pct": 0.55,
+          "avg_trade_size_pct": 0.0,
+          "market_cap_pct": 0.075,
+          "realized_vol_pct": 0.0,
+          "turnover_today_pct": 0.375
+        }
+      },
+      "directionality": {
+        "ic": {
+          "training_mean": -0.030019876250368942,
+          "validation_mean": -0.021343500648982845,
+          "two_sided_training_p": 0.019801980198019802,
+          "reverse_candidate": true
+        },
+        "raw_spread": {
+          "training_mean": -0.0036641407853952607,
+          "validation_mean": -0.0032895442703889223,
+          "two_sided_training_p": 0.019801980198019802,
+          "reverse_candidate": true
+        }
+      },
+      "assertions": [
+        {
+          "id": "P1",
+          "kind": "shape",
+          "subject": "dose_shape",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.039603960396039604
+        },
+        {
+          "id": "P2",
+          "kind": "peak",
+          "subject": "peak_horizon",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.2079207920792079
+        },
+        {
+          "id": "P3",
+          "kind": "sign",
+          "subject": "effect_sign",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.0297029702970297
+        },
+        {
+          "id": "P4",
+          "kind": "side",
+          "subject": "market_cap_pct",
+          "state": "violated",
+          "p_support": 1.0,
+          "p_contradiction": 0.009900990099009901
+        },
+        {
+          "id": "P5",
+          "kind": "side",
+          "subject": "amihud_pct",
+          "state": "violated",
+          "p_support": 1.0,
+          "p_contradiction": 0.009900990099009901
+        }
+      ],
+      "placebo": {
+        "profile": "fast",
+        "state": "untested",
+        "tests": [
+          {
+            "kind": "within_day",
+            "alternative": "two_sided_absolute_mean_ic",
+            "observed": -0.021117328638082324,
+            "p": 0.05,
+            "state": "fail"
+          }
+        ],
+        "skipped_tests": [
+          "time_shift",
+          "iaaft"
+        ]
+      },
+      "source_result_sha256": "0fc7542891b8aef3ce4de0c0b86fd5e6641be32454d90045e5e3226f1eabce3a"
+    },
+    {
+      "candidate": "C014",
+      "name": "行业落后股的同业修复：低相对收益的延迟补涨",
+      "family": "M4",
+      "form": 4,
+      "specification": {
+        "operational": [
+          "neg(xs_rank(sub(ret_5d, industry_mean(ret_5d))))",
+          "neg(xs_z(sub(ret_5d, industry_mean(ret_5d))))",
+          "neg(xs_rank(sub(ts_mean(ret_5d, 3), industry_mean(ts_mean(ret_5d, 3)))))"
+        ],
+        "coverage": "in_pool",
+        "primary_horizon": 5,
+        "mechanism": "在T日收盘时，用ret_5d减去其同行业均值再作横截面排序，该排序的低分位代表过去5日相对同业明显落后的A股。limited_attention_inst在T日收盘信息压缩阶段只能对部分行业龙头或高波动标的完成逐日处理，无法对所有同行业内落后股同步定价；因此这些低相对收益中仍包含一种未被充分吸收的同行比较信息：它们并不是因为基本面比同业更差而被充分给出更低定价，而是其相对落后状态尚未被同业信息扩散机制完全纳入均衡价格。该状态对应underreaction，其修正不发生在T+1，而要经过peer_diffusion逐步完成，即同业机构在后续数个交易日陆续将自身行业更新与该落后股价格对齐，推动其收益修复。因此该F4信号的反向方向预测：ret_5d相对同业均值越低，其后T+3至T+10收益越高。可证伪条件：固定任意T日后，若把ret_5d经行业中位数调整并按截面升序分成五组，未来5日收益不随分位由低到高单调下降，或在同时剔除行业调整后单调关系依然消失，则本机制不成立。"
+      },
+      "lineage": {
+        "operator": "reverse",
+        "parent": "C013",
+        "depth": 1
+      },
+      "proposal_origin": "training_informed",
+      "verdict": "UNDECIDABLE",
+      "research_role": {
+        "formal": false,
+        "reverse_candidate": false,
+        "role": "unresolved_component",
+        "single_cell_alpha_required": false,
+        "training_rules": 0
+      },
+      "primary_ic": {
+        "mean": 0.02607980295922303,
+        "ci_low": 0.018552999564346452,
+        "ci_high": 0.03360660635409961,
+        "days": 1447,
+        "p": 0.009900990099009901,
+        "p_negative": 1.0,
+        "horizon": 5,
+        "expression": 1
+      },
+      "discovery": {
+        "scope": "A_internal_only",
+        "p_median": 1.0,
+        "split_count": 40,
+        "training_rules": [],
+        "selection_frequency": {
+          "amihud_pct": 0.55,
+          "avg_trade_size_pct": 0.0,
+          "market_cap_pct": 0.075,
+          "realized_vol_pct": 0.0,
+          "turnover_today_pct": 0.375
+        }
+      },
+      "directionality": {
+        "ic": {
+          "training_mean": 0.030019876250368942,
+          "validation_mean": 0.021343500648982845,
+          "two_sided_training_p": 0.019801980198019802,
+          "reverse_candidate": false
+        },
+        "raw_spread": {
+          "training_mean": 0.003665551852461314,
+          "validation_mean": 0.0032885142297681023,
+          "two_sided_training_p": 0.019801980198019802,
+          "reverse_candidate": false
+        }
+      },
+      "assertions": [
+        {
+          "id": "P1",
+          "kind": "shape",
+          "subject": "dose_shape",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.10109766581889215
+        },
+        {
+          "id": "P2",
+          "kind": "peak",
+          "subject": "peak_horizon",
+          "state": "untested",
+          "p_support": 0.0297029702970297,
+          "p_contradiction": 1.0
+        },
+        {
+          "id": "P3",
+          "kind": "sign",
+          "subject": "effect_sign",
+          "state": "hold",
+          "p_support": 0.009900990099009901,
+          "p_contradiction": 1.0
+        },
+        {
+          "id": "P4",
+          "kind": "side",
+          "subject": "market_cap_pct",
+          "state": "hold",
+          "p_support": 0.009900990099009901,
+          "p_contradiction": 1.0
+        },
+        {
+          "id": "P5",
+          "kind": "side",
+          "subject": "amihud_pct",
+          "state": "hold",
+          "p_support": 0.009900990099009901,
+          "p_contradiction": 1.0
+        }
+      ],
+      "placebo": {
+        "profile": "fast",
+        "state": "untested",
+        "tests": [
+          {
+            "kind": "within_day",
+            "alternative": "two_sided_absolute_mean_ic",
+            "observed": 0.021117328638082324,
+            "p": 0.05,
+            "state": "fail"
+          }
+        ],
+        "skipped_tests": [
+          "time_shift",
+          "iaaft"
+        ]
+      },
+      "source_result_sha256": "bae9b03e6686d875cd0d1e3903832acaaf777236afbb96e787bb1bc5646b4851"
+    },
+    {
+      "candidate": "C015",
+      "name": "流动性提供 · 水平",
+      "family": "M2",
+      "form": 1,
+      "specification": {
+        "operational": [
+          "neg(xs_z(ret_5d))",
+          "neg(xs_rank(ret_3d))",
+          "neg(sub(ret_1d, industry_mean(ret_1d)))"
+        ],
+        "coverage": "in_pool",
+        "primary_horizon": 5,
+        "mechanism": "短期订单失衡造成临时价格偏离；承接者承担存货风险，价格在存货出清后回归。该补偿在流动性较差和竞价价差较宽的股票中应更强。"
+      },
+      "lineage": {
+        "operator": "seed",
+        "parent": null,
+        "depth": 0
+      },
+      "proposal_origin": "manual",
+      "verdict": "UNDECIDABLE",
+      "research_role": {
+        "formal": false,
+        "reverse_candidate": false,
+        "role": "unresolved_component",
+        "single_cell_alpha_required": false,
+        "training_rules": 0
+      },
+      "primary_ic": {
+        "mean": 0.03206666896465332,
+        "ci_low": 0.024658371878675527,
+        "ci_high": 0.03947496605063112,
+        "days": 1447,
+        "p": 0.009900990099009901,
+        "p_negative": 1.0,
+        "horizon": 5,
+        "expression": 1
+      },
+      "discovery": {
+        "scope": "A_internal_only",
+        "p_median": 0.7885224790352479,
+        "split_count": 40,
+        "training_rules": [],
+        "selection_frequency": {
+          "amihud_pct": 0.875,
+          "avg_trade_size_pct": 0.0,
+          "market_cap_pct": 0.025,
+          "realized_vol_pct": 0.0,
+          "turnover_today_pct": 0.1
+        }
+      },
+      "directionality": {
+        "ic": {
+          "training_mean": 0.03671021006906566,
+          "validation_mean": 0.026230323364648093,
+          "two_sided_training_p": 0.019801980198019802,
+          "reverse_candidate": false
+        },
+        "raw_spread": {
+          "training_mean": 0.00300075303082352,
+          "validation_mean": 0.00180664669136476,
+          "two_sided_training_p": 0.019801980198019802,
+          "reverse_candidate": false
+        }
+      },
+      "assertions": [
+        {
+          "id": "P1",
+          "kind": "shape",
+          "subject": "dose_shape",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.039603960396039604
+        },
+        {
+          "id": "P2",
+          "kind": "peak",
+          "subject": "peak_horizon",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 0.46534653465346537
+        },
+        {
+          "id": "P3",
+          "kind": "sign",
+          "subject": "effect_sign",
+          "state": "hold",
+          "p_support": 0.009900990099009901,
+          "p_contradiction": 1.0
+        },
+        {
+          "id": "P4",
+          "kind": "side",
+          "subject": "amihud_pct",
+          "state": "hold",
+          "p_support": 0.009900990099009901,
+          "p_contradiction": 1.0
+        },
+        {
+          "id": "P5",
+          "kind": "side",
+          "subject": "auction_spread_pct",
+          "state": "untested",
+          "p_support": 1.0,
+          "p_contradiction": 1.0
+        }
+      ],
+      "placebo": {
+        "profile": "fast",
+        "state": "untested",
+        "tests": [
+          {
+            "kind": "within_day",
+            "alternative": "two_sided_absolute_mean_ic",
+            "observed": 0.02651148551095214,
+            "p": 0.05,
+            "state": "fail"
+          }
+        ],
+        "skipped_tests": [
+          "time_shift",
+          "iaaft"
+        ]
+      },
+      "source_result_sha256": "5759bd344ebbda2e0cc23c1a60c21c0182279d5a8921779a56259aaf5a1964e0"
     }
   ]
 }
