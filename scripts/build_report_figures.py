@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -206,7 +207,8 @@ def results(snapshot: dict[str, Any], case: dict[str, Any]) -> None:
         None，分别保存归档结果图和截图案例图。
     """
     rows = snapshot["candidates"]
-    _, ax = plt.subplots(figsize=(10.5, 5))
+    counts = Counter(row["verdict"] for row in rows)
+    _, ax = plt.subplots(figsize=(10.5, max(5, len(rows) * 0.36)))
     for index, row in enumerate(rows):
         ic = row["primary_ic"]
         color = TEAL if row["verdict"] == "UNDECIDABLE" else GOLD
@@ -217,7 +219,11 @@ def results(snapshot: dict[str, Any], case: dict[str, Any]) -> None:
     ax.invert_yaxis()
     ax.set_xlabel("A 段主要 IC 与归档 bootstrap 区间（非独立确认）")
     ax.set_title(
-        "11 个已完成候选 / 6 个未知、5 个未通过", loc="left", pad=18, color=INK, weight="bold"
+        f"{len(rows)} 个已完成候选 / {counts['UNDECIDABLE']} 个未知、{counts['FAIL']} 个未通过",
+        loc="left",
+        pad=18,
+        color=INK,
+        weight="bold",
     )
     ax.grid(axis="x", alpha=0.16)
     plt.tight_layout()
@@ -283,7 +289,7 @@ def main() -> None:
             bool(row["lineage"].get("parent")) for row in snapshot["candidates"]
         ),
         "independently_confirmed": 0,
-        "note": "Top-level evolution counters disagree with per-candidate lineage; preserve source and derive counts from rows.",
+        "note": "Counts derive from per-candidate lineage; source snapshot is preserved unchanged.",
     }
     (OUT / "sources.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
